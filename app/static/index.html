@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyChat</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f4f4f4;
+    }
+
+    .container {
+      max-width: 950px;
+      margin: 30px auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    .header {
+      background: #4a67ff;
+      color: white;
+      padding: 20px;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    input, button, select {
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    input, select {
+      flex: 1;
+      min-width: 140px;
+    }
+
+    button {
+      cursor: pointer;
+      background: #4a67ff;
+      color: white;
+      border: none;
+    }
+
+    button:hover {
+      background: #3954dd;
+    }
+
+    .disconnect-btn {
+      background: #d9534f;
+    }
+
+    .disconnect-btn:hover {
+      background: #c43d39;
+    }
+
+    .status {
+      margin: 10px 0;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .online {
+      margin: 15px 0;
+      padding: 10px;
+      background: #eef2ff;
+      border-radius: 8px;
+    }
+
+    .messages {
+      height: 380px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #e9ecff;
+      align-self: flex-start;
+      word-break: break-word;
+    }
+
+    .message.mine {
+      background: #4a67ff;
+      color: white;
+      align-self: flex-end;
+    }
+
+    .message.system {
+      max-width: 100%;
+      background: #f0f0f0;
+      color: #444;
+      align-self: center;
+      text-align: center;
+    }
+
+    .meta {
+      font-size: 12px;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    .message.mine .meta {
+      color: #e6eaff;
+    }
+
+    .message.system .meta {
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">MyChat</div>
+
+    <div class="content">
+      <div class="row">
+        <input id="usernameInput" type="text" placeholder="Username" value="AAAAA" />
+
+        <select id="roomSelect">
+          <option value="general">general</option>
+          <option value="dev">dev</option>
+          <option value="gaming">gaming</option>
+        </select>
+
+        <input id="newRoomInput" type="text" placeholder="Новая комната..." />
+        <button id="addRoomBtn">Добавить комнату</button>
+      </div>
+
+      <div class="row">
+        <button id="tokenBtn">Получить токен</button>
+        <button id="connectBtn">Подключиться</button>
+        <button id="disconnectBtn" class="disconnect-btn">Отключиться</button>
+      </div>
+
+      <div class="status" id="status">Статус: не подключен</div>
+
+      <div class="online">
+        <strong>Онлайн:</strong>
+        <span id="onlineUsers">—</span>
+      </div>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="row">
+        <input id="messageInput" type="text" placeholder="Введите сообщение..." />
+        <button id="sendBtn">Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let token = null;
+    let currentUserId = null;
+
+    const usernameInput = document.getElementById("usernameInput");
+    const roomSelect = document.getElementById("roomSelect");
+    const newRoomInput = document.getElementById("newRoomInput");
+    const addRoomBtn = document.getElementById("addRoomBtn");
+    const tokenBtn = document.getElementById("tokenBtn");
+    const connectBtn = document.getElementById("connectBtn");
+    const disconnectBtn = document.getElementById("disconnectBtn");
+    const sendBtn = document.getElementById("sendBtn");
+    const messageInput = document.getElementById("messageInput");
+    const statusEl = document.getElementById("status");
+    const onlineUsersEl = document.getElementById("onlineUsers");
+    const messagesEl = document.getElementById("messages");
+
+    function clearMessages() {
+      messagesEl.innerHTML = "";
+    }
+
+    function addMessage(text, meta = "", type = "other") {
+      const div = document.createElement("div");
+      div.className = "message";
+
+      if (type === "mine") {
+        div.classList.add("mine");
+      }
+
+      if (type === "system") {
+        div.classList.add("system");
+      }
+
+      if (meta) {
+        const metaDiv = document.createElement("div");
+        metaDiv.className = "meta";
+        metaDiv.textContent = meta;
+        div.appendChild(metaDiv);
+      }
+
+      const textDiv = document.createElement("div");
+      textDiv.textContent = text;
+      div.appendChild(textDiv);
+
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function getToken() {
+      const username = usernameInput.value.trim();
+      if (!username) {
+        alert("Введите username");
+        return;
+      }
+
+      const response = await fetch(`http://127.0.0.1:8000/auth/login`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ username })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("TOKEN ERROR:", errText);
+        alert("Не удалось получить токен");
+        return;
+      }
+
+      const data = await response.json();
+
+      token = data.access_token;
+      currentUserId = data.user_id;
+
+      statusEl.textContent = `Статус: токен получен для ${data.username} (id=${data.user_id})`;
+      addMessage(`Вход выполнен как ${data.username}`, "", "system");
+    }
+
+    function connectWS() {
+      const room = roomSelect.value;
+
+      if (!token) {
+        alert("Сначала получи токен");
+        return;
+      }
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        addMessage("Уже подключен", "", "system");
+        return;
+      }
+
+      clearMessages();
+
+      ws = new WebSocket(`ws://127.0.0.1:8000/ws/${room}?token=${token}`);
+
+      ws.onopen = () => {
+        statusEl.textContent = `Статус: подключен к комнате "${room}"`;
+        addMessage(`Подключено к комнате ${room}`, "", "system");
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "history") {
+          addMessage(`История комнаты ${data.room} загружена`, "", "system");
+
+          for (const item of data.items) {
+            const type = item.user_id === currentUserId ? "mine" : "other";
+            addMessage(
+              item.text,
+              `user_id=${item.user_id} | ${item.created_at}`,
+              type
+            );
+          }
+          return;
+        }
+
+        if (data.type === "online") {
+          onlineUsersEl.textContent = data.users.length ? data.users.join(", ") : "—";
+          return;
+        }
+
+        if (data.type === "message") {
+          const type = data.user_id === currentUserId ? "mine" : "other";
+          addMessage(
+            data.text,
+            `user_id=${data.user_id} | ${data.created_at}`,
+            type
+          );
+          return;
+        }
+
+        if (data.type === "error") {
+          addMessage(`Ошибка: ${data.detail}`, "", "system");
+        }
+      };
+
+      ws.onclose = (event) => {
+        statusEl.textContent = `Статус: отключен (code=${event.code})`;
+        addMessage(`Соединение закрыто (code=${event.code})`, "", "system");
+      };
+
+      ws.onerror = () => {
+        addMessage("Ошибка WebSocket", "", "system");
+      };
+    }
+
+    function disconnectWS() {
+      if (ws) {
+        ws.close();
+        ws = null;
+        statusEl.textContent = "Статус: отключен вручную";
+      }
+    }
+
+    function sendMessage() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert("Сначала подключись к WebSocket");
+        return;
+      }
+
+      const text = messageInput.value.trim();
+      if (!text) return;
+
+      ws.send(JSON.stringify({ text }));
+      messageInput.value = "";
+    }
+
+    function addRoom() {
+      const roomName = newRoomInput.value.trim();
+      if (!roomName) return;
+
+      const exists = [...roomSelect.options].some(opt => opt.value === roomName);
+      if (exists) {
+        alert("Такая комната уже есть");
+        return;
+      }
+
+      const option = document.createElement("option");
+      option.value = roomName;
+      option.textContent = roomName;
+      roomSelect.appendChild(option);
+      roomSelect.value = roomName;
+      newRoomInput.value = "";
+    }
+
+    tokenBtn.addEventListener("click", getToken);
+    connectBtn.addEventListener("click", connectWS);
+    disconnectBtn.addEventListener("click", disconnectWS);
+    sendBtn.addEventListener("click", sendMessage);
+    addRoomBtn.addEventListener("click", addRoom);
+
+    messageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        sendMessage();
+      }
+    });
+
+    newRoomInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        addRoom();
+      }
+    });
+  </script>
+</body>
+</html>
