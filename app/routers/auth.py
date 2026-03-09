@@ -3,8 +3,8 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
-from app.core.security import create_access_token, hash_password
-from app.schemas.auth import AuthByUsernameRequest, AuthTokenResponse, RegisterRequest
+from app.core.security import create_access_token, hash_password, verify_password
+from app.schemas.auth import AuthTokenResponse, LoginRequest, RegisterRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,23 +47,28 @@ def register(
 
 
 @router.post("/login", response_model=AuthTokenResponse)
-def login_by_username(
-    payload: AuthByUsernameRequest,
+def login(
+    payload: LoginRequest,
     session: Session = Depends(get_session),
 ):
     username = payload.username.strip()
+    password = payload.password
+
     if not username:
         raise HTTPException(status_code=400, detail="username must not be empty")
+
+    if not password:
+        raise HTTPException(status_code=400, detail="password must not be empty")
 
     user = session.exec(
         select(User).where(User.username == username)
     ).first()
 
     if not user:
-        user = User(username=username)
-        session.add(user)
-        session.commit()
-        session.refresh(user)
+        raise HTTPException(status_code=401, detail="invalid username or password")
+
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="invalid username or password")
 
     token = create_access_token(sub=str(user.id))
 

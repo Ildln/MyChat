@@ -1,22 +1,24 @@
 # Auth
 
-## Current auth flow
+## Текущий auth flow
 
-MyChat is moving from a training-only auth flow to a more realistic one.
+Сейчас в MyChat действует минимальный, но уже цельный auth flow:
 
-- `POST /auth/register` is the new registration entry point.
-- `POST /auth/login` still uses the old transitional flow and is not fully aligned with password-based authentication yet.
-- Successful auth responses return:
+- `POST /auth/register` регистрирует нового пользователя
+- `POST /auth/login` выполняет вход существующего пользователя
+- в обоих успешных ответах возвращаются:
   - `user_id`
   - `username`
   - `access_token`
   - `token_type`
 
+Пароль хранится в базе не в открытом виде, а в поле `password_hash`.
+
 ## POST /auth/register
 
-Creates a new user account and immediately returns a JWT access token.
+Создает нового пользователя и сразу возвращает JWT access token.
 
-Request body:
+Тело запроса:
 
 ```json
 {
@@ -25,16 +27,16 @@ Request body:
 }
 ```
 
-Behavior:
+Поведение:
 
-- trims spaces around `username`
-- rejects empty `username`
-- rejects empty `password`
-- rejects duplicate `username`
-- stores a hashed password in `password_hash`
-- returns a JWT for the newly created user
+- делает `strip()` для `username`
+- отклоняет пустой `username`
+- отклоняет пустой `password`
+- отклоняет повторяющийся `username`
+- сохраняет хеш пароля в `password_hash`
+- возвращает JWT для нового пользователя
 
-Success response example:
+Пример успешного ответа:
 
 ```json
 {
@@ -45,10 +47,42 @@ Success response example:
 }
 ```
 
-## Transitional note about login
+## POST /auth/login
 
-`POST /auth/login` is still in a transition state.
+Выполняет вход существующего пользователя по `username` и `password`.
 
-- it has not yet been migrated to password verification
-- it still follows the previous project flow
-- it should be updated in the next auth step after registration is stabilized
+Тело запроса:
+
+```json
+{
+  "username": "alice",
+  "password": "secret123"
+}
+```
+
+Поведение:
+
+- делает `strip()` для `username`
+- отклоняет пустой `username`
+- отклоняет пустой `password`
+- больше не создает пользователя автоматически
+- если пользователь не найден, возвращает `401`
+- если пароль неверный, возвращает `401`
+- при успешном входе возвращает JWT и базовую информацию о пользователе
+
+Пример успешного ответа:
+
+```json
+{
+  "user_id": 1,
+  "username": "alice",
+  "access_token": "<jwt>",
+  "token_type": "bearer"
+}
+```
+
+## Примечание по безопасности
+
+Для случаев «пользователь не найден» и «неверный пароль» используется одинаковый ответ `401` с одной и той же ошибкой.
+
+Это сделано специально, чтобы не раскрывать через API, существует ли пользователь с конкретным `username`.

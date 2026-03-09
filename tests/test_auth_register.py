@@ -6,8 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 import app.db as db_module
 from app.models.user import User
-from app.routers.auth import register
-from app.schemas.auth import RegisterRequest
+from app.routers.auth import login, register
+from app.schemas.auth import LoginRequest, RegisterRequest
 
 
 class RegisterAuthTests(unittest.TestCase):
@@ -76,6 +76,74 @@ class RegisterAuthTests(unittest.TestCase):
         self.assertEqual(first_response.username, "alice")
         self.assertEqual(exc_info.exception.status_code, 400)
         self.assertEqual(exc_info.exception.detail, "username already exists")
+
+    def test_login_success(self):
+        with Session(self.engine) as session:
+            register(
+                RegisterRequest(username="alice", password="secret123"),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            response = login(
+                LoginRequest(username="  alice  ", password="secret123"),
+                session,
+            )
+
+        self.assertEqual(response.username, "alice")
+        self.assertGreater(response.user_id, 0)
+        self.assertTrue(response.access_token)
+        self.assertEqual(response.token_type, "bearer")
+
+    def test_login_rejects_unknown_user(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                login(
+                    LoginRequest(username="alice", password="secret123"),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid username or password")
+
+    def test_login_rejects_wrong_password(self):
+        with Session(self.engine) as session:
+            register(
+                RegisterRequest(username="alice", password="secret123"),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                login(
+                    LoginRequest(username="alice", password="wrong-password"),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid username or password")
+
+    def test_login_rejects_empty_username(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                login(
+                    LoginRequest(username="   ", password="secret123"),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "username must not be empty")
+
+    def test_login_rejects_empty_password(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                login(
+                    LoginRequest(username="alice", password=""),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "password must not be empty")
 
 
 if __name__ == "__main__":
