@@ -1,384 +1,694 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyChat</title>
+  <title>MyChat MVP</title>
   <style>
+    :root {
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --border: #d1d5db;
+      --text: #111827;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --success: #15803d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
       margin: 0;
-      background: #f4f4f4;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: var(--bg);
+      color: var(--text);
     }
 
-    .container {
-      max-width: 950px;
-      margin: 30px auto;
-      background: white;
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    .page-header {
+      margin-bottom: 20px;
+    }
+
+    .page-header h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-      overflow: hidden;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
     }
 
-    .header {
-      background: #4a67ff;
-      color: white;
-      padding: 20px;
-      font-size: 24px;
-      font-weight: bold;
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 20px;
     }
 
-    .content {
-      padding: 20px;
+    .section {
+      margin-bottom: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .section h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
     }
 
     .row {
       display: flex;
-      gap: 10px;
-      margin-bottom: 12px;
+      gap: 8px;
       flex-wrap: wrap;
+      margin-bottom: 10px;
     }
 
-    input, button, select {
-      padding: 10px;
-      font-size: 14px;
+    input,
+    button {
+      font: inherit;
       border-radius: 8px;
-      border: 1px solid #ccc;
     }
 
-    input, select {
-      flex: 1;
-      min-width: 140px;
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      background: #fff;
     }
 
     button {
-      cursor: pointer;
-      background: #4a67ff;
-      color: white;
       border: none;
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 14px;
+      cursor: pointer;
     }
 
     button:hover {
-      background: #3954dd;
+      background: var(--primary-hover);
     }
 
-    .disconnect-btn {
-      background: #d9534f;
+    button.secondary {
+      background: #475569;
     }
 
-    .disconnect-btn:hover {
-      background: #c43d39;
+    button.secondary:hover {
+      background: #334155;
     }
 
-    .status {
-      margin: 10px 0;
+    button.danger {
+      background: var(--danger);
+    }
+
+    button.danger:hover {
+      background: var(--danger-hover);
+    }
+
+    button.small {
+      padding: 6px 10px;
       font-size: 14px;
-      color: #333;
     }
 
-    .online {
-      margin: 15px 0;
-      padding: 10px;
-      background: #eef2ff;
-      border-radius: 8px;
+    .hint {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 14px;
     }
 
-    .messages {
-      height: 380px;
-      overflow-y: auto;
-      border: 1px solid #ddd;
+    .status-box,
+    .token-box,
+    .json-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 12px;
-      background: #fafafa;
-      margin-bottom: 12px;
+      padding: 10px 12px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 44px;
+    }
+
+    .status-box.ok {
+      border-color: #bbf7d0;
+      color: var(--success);
+      background: #f0fdf4;
+    }
+
+    .status-box.error {
+      border-color: #fecaca;
+      color: #991b1b;
+      background: #fef2f2;
+    }
+
+    .list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .message {
-      max-width: 70%;
+    .item {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
       padding: 10px 12px;
-      border-radius: 12px;
-      background: #e9ecff;
-      align-self: flex-start;
-      word-break: break-word;
+      background: #fff;
     }
 
-    .message.mine {
-      background: #4a67ff;
-      color: white;
-      align-self: flex-end;
-    }
-
-    .message.system {
-      max-width: 100%;
-      background: #f0f0f0;
-      color: #444;
-      align-self: center;
-      text-align: center;
-    }
-
-    .meta {
-      font-size: 12px;
+    .item-title {
+      font-weight: 600;
       margin-bottom: 4px;
-      opacity: 0.8;
     }
 
-    .message.mine .meta {
-      color: #e6eaff;
+    .item-meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
     }
 
-    .message.system .meta {
-      color: #666;
+    .empty {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 8px 0;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 700px) {
+      .page {
+        padding: 16px 12px 24px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">MyChat</div>
+  <div class="page">
+    <div class="page-header">
+      <h1>MyChat MVP</h1>
+      <p>Простой интерфейс для ручной проверки авторизации, друзей и личных чатов.</p>
+    </div>
 
-    <div class="content">
-      <div class="row">
-        <input id="usernameInput" type="text" placeholder="Username" value="AAAAA" />
+    <div class="grid">
+      <section class="card">
+        <h2>Авторизация</h2>
 
-        <select id="roomSelect">
-          <option value="general">general</option>
-          <option value="dev">dev</option>
-          <option value="gaming">gaming</option>
-        </select>
+        <div class="section">
+          <h3>Регистрация</h3>
+          <div class="row">
+            <input id="registerUsername" type="text" placeholder="Введите имя пользователя" />
+          </div>
+          <div class="row">
+            <input id="registerPassword" type="password" placeholder="Введите пароль" />
+          </div>
+          <div class="row">
+            <button id="registerBtn">Зарегистрироваться</button>
+          </div>
+        </div>
 
-        <input id="newRoomInput" type="text" placeholder="Новая комната..." />
-        <button id="addRoomBtn">Добавить комнату</button>
-      </div>
+        <div class="section">
+          <h3>Вход</h3>
+          <div class="row">
+            <input id="loginUsername" type="text" placeholder="Имя пользователя для входа" />
+          </div>
+          <div class="row">
+            <input id="loginPassword" type="password" placeholder="Пароль для входа" />
+          </div>
+          <div class="row">
+            <button id="loginBtn">Войти</button>
+          </div>
+        </div>
 
-      <div class="row">
-        <button id="tokenBtn">Получить токен</button>
-        <button id="connectBtn">Подключиться</button>
-        <button id="disconnectBtn" class="disconnect-btn">Отключиться</button>
-      </div>
+        <div class="section">
+          <h3>Токен и текущий пользователь</h3>
+          <p class="hint">Токен сохраняется в браузере и автоматически используется для защищенных запросов.</p>
+          <div class="row">
+            <button id="meBtn">Показать текущего пользователя</button>
+            <button id="clearTokenBtn" class="danger">Очистить токен</button>
+          </div>
+          <div class="token-box" id="tokenBox">Токен пока отсутствует.</div>
+          <div class="json-box" id="meBox">Данные текущего пользователя еще не загружены.</div>
+        </div>
+      </section>
 
-      <div class="status" id="status">Статус: не подключен</div>
+      <section class="card">
+        <h2>Друзья</h2>
 
-      <div class="online">
-        <strong>Онлайн:</strong>
-        <span id="onlineUsers">—</span>
-      </div>
+        <div class="section">
+          <h3>Новая заявка в друзья</h3>
+          <p class="hint">Укажите ID пользователя, которому хотите отправить заявку.</p>
+          <div class="row">
+            <input id="friendTargetUserId" type="number" placeholder="ID пользователя" />
+          </div>
+          <div class="row">
+            <button id="sendFriendRequestBtn">Отправить заявку</button>
+          </div>
+        </div>
 
-      <div class="messages" id="messages"></div>
+        <div class="section">
+          <h3>Управление заявками и друзьями</h3>
+          <div class="row">
+            <button id="loadIncomingBtn">Загрузить входящие заявки</button>
+            <button id="loadOutgoingBtn" class="secondary">Загрузить исходящие заявки</button>
+            <button id="loadFriendsBtn" class="secondary">Загрузить список друзей</button>
+          </div>
 
-      <div class="row">
-        <input id="messageInput" type="text" placeholder="Введите сообщение..." />
-        <button id="sendBtn">Отправить</button>
-      </div>
+          <h3>Входящие заявки</h3>
+          <div class="list" id="incomingList"></div>
+
+          <h3>Исходящие заявки</h3>
+          <div class="list" id="outgoingList"></div>
+
+          <h3>Список друзей</h3>
+          <div class="list" id="friendsList"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Личные чаты</h2>
+
+        <div class="section">
+          <h3>Создание личного чата</h3>
+          <p class="hint">Личный чат можно создать только с пользователем из списка друзей.</p>
+          <div class="row">
+            <input id="chatTargetUserId" type="number" placeholder="ID друга" />
+          </div>
+          <div class="row">
+            <button id="createDirectChatBtn">Создать direct chat</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Список чатов</h3>
+          <div class="row">
+            <button id="loadChatsBtn">Загрузить список чатов</button>
+          </div>
+          <div class="list" id="chatsList"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Результат последнего запроса</h2>
+        <p class="hint">Здесь отображаются успешные ответы и ошибки backend.</p>
+        <div class="status-box" id="statusBox">Интерфейс готов к работе.</div>
+      </section>
     </div>
   </div>
 
   <script>
-    let ws = null;
-    let token = null;
-    let currentUserId = null;
+    const tokenStorageKey = "mychat_access_token";
 
-    const usernameInput = document.getElementById("usernameInput");
-    const roomSelect = document.getElementById("roomSelect");
-    const newRoomInput = document.getElementById("newRoomInput");
-    const addRoomBtn = document.getElementById("addRoomBtn");
-    const tokenBtn = document.getElementById("tokenBtn");
-    const connectBtn = document.getElementById("connectBtn");
-    const disconnectBtn = document.getElementById("disconnectBtn");
-    const sendBtn = document.getElementById("sendBtn");
-    const messageInput = document.getElementById("messageInput");
-    const statusEl = document.getElementById("status");
-    const onlineUsersEl = document.getElementById("onlineUsers");
-    const messagesEl = document.getElementById("messages");
+    const registerUsernameInput = document.getElementById("registerUsername");
+    const registerPasswordInput = document.getElementById("registerPassword");
+    const loginUsernameInput = document.getElementById("loginUsername");
+    const loginPasswordInput = document.getElementById("loginPassword");
+    const friendTargetUserIdInput = document.getElementById("friendTargetUserId");
+    const chatTargetUserIdInput = document.getElementById("chatTargetUserId");
 
-    function clearMessages() {
-      messagesEl.innerHTML = "";
+    const registerBtn = document.getElementById("registerBtn");
+    const loginBtn = document.getElementById("loginBtn");
+    const meBtn = document.getElementById("meBtn");
+    const clearTokenBtn = document.getElementById("clearTokenBtn");
+    const sendFriendRequestBtn = document.getElementById("sendFriendRequestBtn");
+    const loadIncomingBtn = document.getElementById("loadIncomingBtn");
+    const loadOutgoingBtn = document.getElementById("loadOutgoingBtn");
+    const loadFriendsBtn = document.getElementById("loadFriendsBtn");
+    const createDirectChatBtn = document.getElementById("createDirectChatBtn");
+    const loadChatsBtn = document.getElementById("loadChatsBtn");
+
+    const tokenBox = document.getElementById("tokenBox");
+    const meBox = document.getElementById("meBox");
+    const statusBox = document.getElementById("statusBox");
+    const incomingList = document.getElementById("incomingList");
+    const outgoingList = document.getElementById("outgoingList");
+    const friendsList = document.getElementById("friendsList");
+    const chatsList = document.getElementById("chatsList");
+
+    function setStatus(message, type = "") {
+      statusBox.textContent = message;
+      statusBox.className = "status-box";
+      if (type) {
+        statusBox.classList.add(type);
+      }
     }
 
-    function addMessage(text, meta = "", type = "other") {
-      const div = document.createElement("div");
-      div.className = "message";
-
-      if (type === "mine") {
-        div.classList.add("mine");
-      }
-
-      if (type === "system") {
-        div.classList.add("system");
-      }
-
-      if (meta) {
-        const metaDiv = document.createElement("div");
-        metaDiv.className = "meta";
-        metaDiv.textContent = meta;
-        div.appendChild(metaDiv);
-      }
-
-      const textDiv = document.createElement("div");
-      textDiv.textContent = text;
-      div.appendChild(textDiv);
-
-      messagesEl.appendChild(div);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+    function getToken() {
+      return localStorage.getItem(tokenStorageKey) || "";
     }
 
-    async function getToken() {
-      const username = usernameInput.value.trim();
-      if (!username) {
-        alert("Введите username");
-        return;
+    function saveToken(token) {
+      localStorage.setItem(tokenStorageKey, token);
+      renderToken();
+    }
+
+    function clearToken() {
+      localStorage.removeItem(tokenStorageKey);
+      renderToken();
+      meBox.textContent = "Данные текущего пользователя еще не загружены.";
+    }
+
+    function renderToken() {
+      const token = getToken();
+      tokenBox.textContent = token || "Токен пока отсутствует.";
+    }
+
+    async function apiFetch(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      const token = getToken();
+
+      if (options.auth !== false && token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`http://127.0.0.1:8000/auth/login`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ username })
+      const response = await fetch(path, {
+        ...options,
+        headers,
       });
 
+      let data = null;
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+      }
+
       if (!response.ok) {
-        const errText = await response.text();
-        console.error("TOKEN ERROR:", errText);
-        alert("Не удалось получить токен");
+        const detail = data && typeof data === "object" && data.detail
+          ? data.detail
+          : `HTTP ${response.status}`;
+        throw new Error(detail);
+      }
+
+      return data;
+    }
+
+    function renderList(container, items, renderItem, emptyText) {
+      container.innerHTML = "";
+      if (!items || items.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = emptyText;
+        container.appendChild(empty);
         return;
       }
 
-      const data = await response.json();
-
-      token = data.access_token;
-      currentUserId = data.user_id;
-
-      statusEl.textContent = `Статус: токен получен для ${data.username} (id=${data.user_id})`;
-      addMessage(`Вход выполнен как ${data.username}`, "", "system");
-    }
-
-    function connectWS() {
-      const room = roomSelect.value;
-
-      if (!token) {
-        alert("Сначала получи токен");
-        return;
-      }
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        addMessage("Уже подключен", "", "system");
-        return;
-      }
-
-      clearMessages();
-
-      ws = new WebSocket(`ws://127.0.0.1:8000/ws/${room}?token=${token}`);
-
-      ws.onopen = () => {
-        statusEl.textContent = `Статус: подключен к комнате "${room}"`;
-        addMessage(`Подключено к комнате ${room}`, "", "system");
-      };
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === "history") {
-          addMessage(`История комнаты ${data.room} загружена`, "", "system");
-
-          for (const item of data.items) {
-            const type = item.user_id === currentUserId ? "mine" : "other";
-            addMessage(
-              item.text,
-              `user_id=${item.user_id} | ${item.created_at}`,
-              type
-            );
-          }
-          return;
-        }
-
-        if (data.type === "online") {
-          onlineUsersEl.textContent = data.users.length ? data.users.join(", ") : "—";
-          return;
-        }
-
-        if (data.type === "message") {
-          const type = data.user_id === currentUserId ? "mine" : "other";
-          addMessage(
-            data.text,
-            `user_id=${data.user_id} | ${data.created_at}`,
-            type
-          );
-          return;
-        }
-
-        if (data.type === "error") {
-          addMessage(`Ошибка: ${data.detail}`, "", "system");
-        }
-      };
-
-      ws.onclose = (event) => {
-        statusEl.textContent = `Статус: отключен (code=${event.code})`;
-        addMessage(`Соединение закрыто (code=${event.code})`, "", "system");
-      };
-
-      ws.onerror = () => {
-        addMessage("Ошибка WebSocket", "", "system");
-      };
-    }
-
-    function disconnectWS() {
-      if (ws) {
-        ws.close();
-        ws = null;
-        statusEl.textContent = "Статус: отключен вручную";
+      for (const item of items) {
+        container.appendChild(renderItem(item));
       }
     }
 
-    function sendMessage() {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        alert("Сначала подключись к WebSocket");
-        return;
+    function createRequestCard(request, withActions = false) {
+      const card = document.createElement("div");
+      card.className = "item";
+
+      const title = document.createElement("div");
+      title.className = "item-title";
+      title.textContent = `Заявка #${request.id}`;
+      card.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "item-meta";
+      meta.textContent = `От пользователя ${request.from_user_id}, получатель ${request.to_user_id}, статус ${request.status}`;
+      card.appendChild(meta);
+
+      if (withActions && request.status === "pending") {
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const acceptBtn = document.createElement("button");
+        acceptBtn.className = "small";
+        acceptBtn.textContent = "Принять";
+        acceptBtn.addEventListener("click", () => handleAccept(request.id));
+
+        const declineBtn = document.createElement("button");
+        declineBtn.className = "small danger";
+        declineBtn.textContent = "Отклонить";
+        declineBtn.addEventListener("click", () => handleDecline(request.id));
+
+        actions.appendChild(acceptBtn);
+        actions.appendChild(declineBtn);
+        card.appendChild(actions);
       }
 
-      const text = messageInput.value.trim();
-      if (!text) return;
-
-      ws.send(JSON.stringify({ text }));
-      messageInput.value = "";
+      return card;
     }
 
-    function addRoom() {
-      const roomName = newRoomInput.value.trim();
-      if (!roomName) return;
+    function createFriendCard(friend) {
+      const card = document.createElement("div");
+      card.className = "item";
 
-      const exists = [...roomSelect.options].some(opt => opt.value === roomName);
-      if (exists) {
-        alert("Такая комната уже есть");
-        return;
-      }
+      const title = document.createElement("div");
+      title.className = "item-title";
+      title.textContent = friend.username;
+      card.appendChild(title);
 
-      const option = document.createElement("option");
-      option.value = roomName;
-      option.textContent = roomName;
-      roomSelect.appendChild(option);
-      roomSelect.value = roomName;
-      newRoomInput.value = "";
+      const meta = document.createElement("div");
+      meta.className = "item-meta";
+      meta.textContent = `ID пользователя: ${friend.id}`;
+      card.appendChild(meta);
+
+      return card;
     }
 
-    tokenBtn.addEventListener("click", getToken);
-    connectBtn.addEventListener("click", connectWS);
-    disconnectBtn.addEventListener("click", disconnectWS);
-    sendBtn.addEventListener("click", sendMessage);
-    addRoomBtn.addEventListener("click", addRoom);
+    function createChatCard(chat) {
+      const card = document.createElement("div");
+      card.className = "item";
 
-    messageInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        sendMessage();
+      const title = document.createElement("div");
+      title.className = "item-title";
+      title.textContent = `Чат #${chat.id} (${chat.type})`;
+      card.appendChild(title);
+
+      const members = document.createElement("div");
+      members.className = "item-meta";
+      members.textContent = `Участники: ${chat.members.map(member => `${member.username} (ID=${member.id})`).join(", ")}`;
+      card.appendChild(members);
+
+      return card;
+    }
+
+    async function handleRegister() {
+      try {
+        const data = await apiFetch("/auth/register", {
+          method: "POST",
+          auth: false,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: registerUsernameInput.value,
+            password: registerPasswordInput.value,
+          }),
+        });
+
+        saveToken(data.access_token);
+        meBox.textContent = JSON.stringify(
+          { id: data.user_id, username: data.username },
+          null,
+          2
+        );
+        setStatus(`Регистрация выполнена для пользователя ${data.username} (ID=${data.user_id})`, "ok");
+      } catch (error) {
+        setStatus(`Ошибка регистрации: ${error.message}`, "error");
       }
+    }
+
+    async function handleLogin() {
+      try {
+        const data = await apiFetch("/auth/login", {
+          method: "POST",
+          auth: false,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: loginUsernameInput.value,
+            password: loginPasswordInput.value,
+          }),
+        });
+
+        saveToken(data.access_token);
+        meBox.textContent = JSON.stringify(
+          { id: data.user_id, username: data.username },
+          null,
+          2
+        );
+        setStatus(`Вход выполнен для пользователя ${data.username} (ID=${data.user_id})`, "ok");
+      } catch (error) {
+        setStatus(`Ошибка входа: ${error.message}`, "error");
+      }
+    }
+
+    async function handleMe() {
+      try {
+        const data = await apiFetch("/auth/me");
+        meBox.textContent = JSON.stringify(data, null, 2);
+        setStatus(`Текущий пользователь: ${data.username}`, "ok");
+      } catch (error) {
+        meBox.textContent = "Не удалось получить данные текущего пользователя.";
+        setStatus(`Ошибка запроса /auth/me: ${error.message}`, "error");
+      }
+    }
+
+    async function handleSendFriendRequest() {
+      try {
+        const data = await apiFetch("/friends/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to_user_id: Number(friendTargetUserIdInput.value),
+          }),
+        });
+
+        setStatus(`Заявка в друзья отправлена. Номер заявки: ${data.id}`, "ok");
+        await Promise.all([loadOutgoingRequests(), loadIncomingRequests()]);
+      } catch (error) {
+        setStatus(`Ошибка отправки заявки: ${error.message}`, "error");
+      }
+    }
+
+    async function loadIncomingRequests() {
+      try {
+        const items = await apiFetch("/friends/requests/incoming");
+        renderList(
+          incomingList,
+          items,
+          (item) => createRequestCard(item, true),
+          "Входящих заявок пока нет."
+        );
+        setStatus("Входящие заявки успешно загружены.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки входящих заявок: ${error.message}`, "error");
+      }
+    }
+
+    async function loadOutgoingRequests() {
+      try {
+        const items = await apiFetch("/friends/requests/outgoing");
+        renderList(
+          outgoingList,
+          items,
+          (item) => createRequestCard(item, false),
+          "Исходящих заявок пока нет."
+        );
+        setStatus("Исходящие заявки успешно загружены.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки исходящих заявок: ${error.message}`, "error");
+      }
+    }
+
+    async function loadFriends() {
+      try {
+        const items = await apiFetch("/friends");
+        renderList(
+          friendsList,
+          items,
+          createFriendCard,
+          "Список друзей пока пуст."
+        );
+        setStatus("Список друзей успешно загружен.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки списка друзей: ${error.message}`, "error");
+      }
+    }
+
+    async function handleAccept(requestId) {
+      try {
+        await apiFetch(`/friends/requests/${requestId}/accept`, { method: "POST" });
+        setStatus(`Заявка #${requestId} принята.`, "ok");
+        await Promise.all([loadIncomingRequests(), loadOutgoingRequests(), loadFriends()]);
+      } catch (error) {
+        setStatus(`Ошибка принятия заявки: ${error.message}`, "error");
+      }
+    }
+
+    async function handleDecline(requestId) {
+      try {
+        await apiFetch(`/friends/requests/${requestId}/decline`, { method: "POST" });
+        setStatus(`Заявка #${requestId} отклонена.`, "ok");
+        await Promise.all([loadIncomingRequests(), loadOutgoingRequests()]);
+      } catch (error) {
+        setStatus(`Ошибка отклонения заявки: ${error.message}`, "error");
+      }
+    }
+
+    async function handleCreateDirectChat() {
+      try {
+        const data = await apiFetch("/chats/direct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: Number(chatTargetUserIdInput.value),
+          }),
+        });
+
+        setStatus(`Личный чат готов. ID чата: ${data.id}`, "ok");
+        await loadChats();
+      } catch (error) {
+        setStatus(`Ошибка создания личного чата: ${error.message}`, "error");
+      }
+    }
+
+    async function loadChats() {
+      try {
+        const items = await apiFetch("/chats");
+        renderList(
+          chatsList,
+          items,
+          createChatCard,
+          "Список чатов пока пуст."
+        );
+        setStatus("Список чатов успешно загружен.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки списка чатов: ${error.message}`, "error");
+      }
+    }
+
+    registerBtn.addEventListener("click", handleRegister);
+    loginBtn.addEventListener("click", handleLogin);
+    meBtn.addEventListener("click", handleMe);
+    clearTokenBtn.addEventListener("click", () => {
+      clearToken();
+      setStatus("Токен очищен.", "ok");
     });
+    sendFriendRequestBtn.addEventListener("click", handleSendFriendRequest);
+    loadIncomingBtn.addEventListener("click", loadIncomingRequests);
+    loadOutgoingBtn.addEventListener("click", loadOutgoingRequests);
+    loadFriendsBtn.addEventListener("click", loadFriends);
+    createDirectChatBtn.addEventListener("click", handleCreateDirectChat);
+    loadChatsBtn.addEventListener("click", loadChats);
 
-    newRoomInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        addRoom();
-      }
-    });
+    renderToken();
   </script>
 </body>
 </html>
