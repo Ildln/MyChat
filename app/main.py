@@ -7,6 +7,7 @@ from app.routers.messages import router as messages_router
 from app.routers.ws import router as ws_router
 from app.routers.auth import router as auth_router
 from app.routers.friends import router as friends_router
+from app.routers.chats import router as chats_router
 
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +22,7 @@ app.include_router(messages_router)
 app.include_router(ws_router)
 app.include_router(auth_router)
 app.include_router(friends_router)
+app.include_router(chats_router)
 
 
 @app.get("/")
