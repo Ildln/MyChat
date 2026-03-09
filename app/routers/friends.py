@@ -8,6 +8,7 @@ from app.models.friendship import Friendship
 from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.friend_request import FriendRequestCreate, FriendRequestRead
+from app.schemas.user import UserRead
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -82,6 +83,42 @@ def get_outgoing_friend_requests(
 
 def normalize_friendship_pair(user_id_1: int, user_id_2: int) -> tuple[int, int]:
     return tuple(sorted((user_id_1, user_id_2)))
+
+
+@router.get("", response_model=list[UserRead])
+def get_friends(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    friendships = session.exec(
+        select(Friendship).where(
+            or_(
+                Friendship.user_a_id == current_user.id,
+                Friendship.user_b_id == current_user.id,
+            )
+        )
+    ).all()
+
+    friend_ids = []
+    for friendship in friendships:
+        if friendship.user_a_id == current_user.id:
+            friend_ids.append(friendship.user_b_id)
+        else:
+            friend_ids.append(friendship.user_a_id)
+
+    if not friend_ids:
+        return []
+
+    friends = session.exec(
+        select(User)
+        .where(User.id.in_(friend_ids))
+        .order_by(User.id.asc())
+    ).all()
+
+    return [
+        UserRead(id=friend.id, username=friend.username)
+        for friend in friends
+    ]
 
 
 def get_request_for_recipient(session: Session, request_id: int, current_user_id: int) -> FriendRequest:

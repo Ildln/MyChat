@@ -13,6 +13,7 @@ from app.routers.friends import (
     accept_friend_request,
     create_friend_request,
     decline_friend_request,
+    get_friends,
     get_incoming_friend_requests,
     get_outgoing_friend_requests,
 )
@@ -287,6 +288,74 @@ class FriendRequestsTests(unittest.TestCase):
         self.assertEqual(exc_info.exception.detail, "friend request already processed")
 
     def test_protected_friends_endpoints_require_authentication(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(None, session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_get_friends_returns_empty_list_without_friendships(self):
+        alice = self.create_user("alice")
+
+        with Session(self.engine) as session:
+            response = get_friends(session.get(User, alice.user_id), session)
+
+        self.assertEqual(response, [])
+
+    def test_get_friends_returns_friend_after_accept(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+
+        with Session(self.engine) as session:
+            created_request = create_friend_request(
+                FriendRequestCreate(to_user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            accept_friend_request(
+                created_request.id,
+                session.get(User, bob.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            friends = get_friends(session.get(User, alice.user_id), session)
+
+        self.assertEqual(len(friends), 1)
+        self.assertEqual(friends[0].id, bob.user_id)
+        self.assertEqual(friends[0].username, "bob")
+
+    def test_get_friends_returns_friend_for_both_sides(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+
+        with Session(self.engine) as session:
+            created_request = create_friend_request(
+                FriendRequestCreate(to_user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            accept_friend_request(
+                created_request.id,
+                session.get(User, bob.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            alice_friends = get_friends(session.get(User, alice.user_id), session)
+            bob_friends = get_friends(session.get(User, bob.user_id), session)
+
+        self.assertEqual(len(alice_friends), 1)
+        self.assertEqual(len(bob_friends), 1)
+        self.assertEqual(alice_friends[0].id, bob.user_id)
+        self.assertEqual(bob_friends[0].id, alice.user_id)
+
+    def test_get_friends_requires_authentication(self):
         with Session(self.engine) as session:
             with self.assertRaises(HTTPException) as exc_info:
                 get_current_user(None, session)
