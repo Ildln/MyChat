@@ -33,6 +33,21 @@ def build_chat_read(session: Session, chat: Chat) -> ChatRead:
     )
 
 
+@router.get("", response_model=list[ChatRead])
+def get_chats(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    chats = session.exec(
+        select(Chat)
+        .join(ChatMember, ChatMember.chat_id == Chat.id)
+        .where(ChatMember.user_id == current_user.id)
+        .order_by(Chat.id.asc())
+    ).all()
+
+    return [build_chat_read(session, chat) for chat in chats]
+
+
 @router.post("/direct", response_model=ChatRead)
 def create_direct_chat(
     payload: DirectChatCreate,

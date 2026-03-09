@@ -9,7 +9,7 @@ from app.models.chat import Chat
 from app.models.chat_member import ChatMember
 from app.models.user import User
 from app.routers.auth import get_current_user, register
-from app.routers.chats import create_direct_chat
+from app.routers.chats import create_direct_chat, get_chats
 from app.routers.friends import accept_friend_request, create_friend_request
 from app.schemas.auth import RegisterRequest
 from app.schemas.chat import DirectChatCreate
@@ -156,6 +156,80 @@ class DirectChatsTests(unittest.TestCase):
                     current_user,
                     session,
                 )
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_get_chats_returns_empty_list_without_chats(self):
+        alice = self.create_user("alice")
+
+        with Session(self.engine) as session:
+            chats = get_chats(session.get(User, alice.user_id), session)
+
+        self.assertEqual(chats, [])
+
+    def test_get_chats_returns_direct_chat_after_creation(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            created_chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            chats = get_chats(session.get(User, alice.user_id), session)
+
+        self.assertEqual(len(chats), 1)
+        self.assertEqual(chats[0].id, created_chat.id)
+        self.assertEqual(chats[0].type, "direct")
+
+    def test_get_chats_returns_direct_chat_for_both_sides(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            created_chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            alice_chats = get_chats(session.get(User, alice.user_id), session)
+            bob_chats = get_chats(session.get(User, bob.user_id), session)
+
+        self.assertEqual(len(alice_chats), 1)
+        self.assertEqual(len(bob_chats), 1)
+        self.assertEqual(alice_chats[0].id, created_chat.id)
+        self.assertEqual(bob_chats[0].id, created_chat.id)
+
+    def test_get_chats_does_not_return_foreign_chats(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            charlie_chats = get_chats(session.get(User, charlie.user_id), session)
+
+        self.assertEqual(charlie_chats, [])
+
+    def test_get_chats_requires_authentication(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(None, session)
 
         self.assertEqual(exc_info.exception.status_code, 401)
         self.assertEqual(exc_info.exception.detail, "not authenticated")
