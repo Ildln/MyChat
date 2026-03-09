@@ -1,12 +1,34 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, hash_password, verify_password, verify_token
 from app.schemas.auth import AuthTokenResponse, LoginRequest, RegisterRequest
+from app.schemas.user import UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Session = Depends(get_session),
+) -> User:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="not authenticated")
+
+    try:
+        user_id = int(verify_token(credentials.credentials))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    return user
 
 
 @router.post("/register", response_model=AuthTokenResponse)
@@ -76,4 +98,12 @@ def login(
         user_id=user.id,
         username=user.username,
         access_token=token,
+    )
+
+
+@router.get("/me", response_model=UserRead)
+def me(current_user: User = Depends(get_current_user)):
+    return UserRead(
+        id=current_user.id,
+        username=current_user.username,
     )

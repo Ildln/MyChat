@@ -1,12 +1,14 @@
 import unittest
 
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlalchemy.pool import StaticPool
 
 import app.db as db_module
+from app.core.security import create_access_token
 from app.models.user import User
-from app.routers.auth import login, register
+from app.routers.auth import get_current_user, login, me, register
 from app.schemas.auth import LoginRequest, RegisterRequest
 
 
@@ -144,6 +146,59 @@ class RegisterAuthTests(unittest.TestCase):
 
         self.assertEqual(exc_info.exception.status_code, 400)
         self.assertEqual(exc_info.exception.detail, "password must not be empty")
+
+    def test_me_success_with_valid_token(self):
+        with Session(self.engine) as session:
+            auth_response = register(
+                RegisterRequest(username="alice", password="secret123"),
+                session,
+            )
+
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=auth_response.access_token,
+        )
+
+        with Session(self.engine) as session:
+            current_user = get_current_user(credentials, session)
+            response = me(current_user)
+
+        self.assertEqual(response.id, auth_response.user_id)
+        self.assertEqual(response.username, "alice")
+
+    def test_me_rejects_request_without_token(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(None, session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_me_rejects_invalid_token(self):
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="not-a-valid-token",
+        )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(credentials, session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid token")
+
+    def test_me_rejects_token_for_missing_user(self):
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=create_access_token(sub="999999"),
+        )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(credentials, session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid token")
 
 
 if __name__ == "__main__":
