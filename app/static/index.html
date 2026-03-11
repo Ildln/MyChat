@@ -3,19 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyChat MVP</title>
+  <title>MyChat</title>
   <style>
     :root {
-      --bg: #f3f4f6;
-      --card: #ffffff;
-      --border: #d1d5db;
-      --text: #111827;
-      --muted: #6b7280;
+      --bg: #eef2f7;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --border: #d9e1ec;
+      --text: #172033;
+      --muted: #667085;
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
+      --secondary: #475467;
+      --secondary-hover: #344054;
       --danger: #dc2626;
       --danger-hover: #b91c1c;
-      --success: #15803d;
+      --success-bg: #edfdf3;
+      --success-border: #abefc6;
+      --success-text: #067647;
+      --error-bg: #fef3f2;
+      --error-border: #fecdca;
+      --error-text: #b42318;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
     }
 
     * {
@@ -25,149 +34,276 @@
     body {
       margin: 0;
       font-family: "Segoe UI", Tahoma, sans-serif;
-      background: var(--bg);
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
       color: var(--text);
     }
 
-    .page {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px 16px 40px;
+    button,
+    input {
+      font: inherit;
     }
 
-    .page-header {
-      margin-bottom: 20px;
+    .hidden {
+      display: none !important;
     }
 
-    .page-header h1 {
+    .auth-shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .auth-title {
       margin: 0 0 8px;
       font-size: 28px;
     }
 
-    .page-header p {
-      margin: 0;
+    .auth-subtitle {
+      margin: 0 0 18px;
       color: var(--muted);
+      line-height: 1.5;
     }
 
-    .grid {
+    .tabs {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .tab-btn,
+    .btn {
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+
+    .tab-btn {
+      padding: 12px 14px;
+      background: #e7eef8;
+      color: var(--secondary);
+      font-weight: 600;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn:hover,
+    .tab-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn.secondary {
+      background: var(--secondary);
+    }
+
+    .btn.secondary:hover {
+      background: var(--secondary-hover);
+    }
+
+    .btn.danger {
+      background: var(--danger);
+    }
+
+    .btn.danger:hover {
+      background: var(--danger-hover);
+    }
+
+    .btn.small {
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .status-box,
+    .panel-box {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status-box.ok {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-text);
+    }
+
+    .status-box.error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-text);
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .app-header h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .app-header p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .user-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #e8efff;
+      color: #1e3a8a;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .app-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr) 340px;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .sidebar,
+    .main-panel,
+    .rightbar {
+      min-height: calc(100vh - 98px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid #edf2f7;
+      background: #fbfdff;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .panel-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .panel-content {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
       gap: 16px;
     }
 
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
-    }
-
-    .card h2 {
-      margin: 0 0 14px;
-      font-size: 20px;
-    }
-
     .section {
-      margin-bottom: 18px;
-      padding-bottom: 18px;
-      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #edf2f7;
     }
 
     .section:last-child {
-      margin-bottom: 0;
       padding-bottom: 0;
       border-bottom: none;
     }
 
-    .section h3 {
-      margin: 0 0 10px;
-      font-size: 16px;
+    .section-title {
+      margin: 0;
+      font-size: 15px;
     }
 
-    .row {
+    .section-actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 10px;
-    }
-
-    input,
-    button {
-      font: inherit;
-      border-radius: 8px;
-    }
-
-    input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      background: #fff;
-    }
-
-    button {
-      border: none;
-      background: var(--primary);
-      color: #fff;
-      padding: 10px 14px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: var(--primary-hover);
-    }
-
-    button.secondary {
-      background: #475569;
-    }
-
-    button.secondary:hover {
-      background: #334155;
-    }
-
-    button.danger {
-      background: var(--danger);
-    }
-
-    button.danger:hover {
-      background: var(--danger-hover);
-    }
-
-    button.small {
-      padding: 6px 10px;
-      font-size: 14px;
-    }
-
-    .hint {
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .status-box,
-    .token-box,
-    .json-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-family: Consolas, monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      min-height: 44px;
-    }
-
-    .status-box.ok {
-      border-color: #bbf7d0;
-      color: var(--success);
-      background: #f0fdf4;
-    }
-
-    .status-box.error {
-      border-color: #fecaca;
-      color: #991b1b;
-      background: #fef2f2;
     }
 
     .list {
@@ -177,10 +313,15 @@
     }
 
     .item {
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 10px 12px;
+      border: 1px solid #e8eef5;
+      border-radius: 14px;
       background: #fff;
+      padding: 12px;
+    }
+
+    .item.active {
+      border-color: #b7cdfc;
+      background: #eff6ff;
     }
 
     .item-title {
@@ -191,7 +332,7 @@
     .item-meta {
       color: var(--muted);
       font-size: 13px;
-      margin-bottom: 8px;
+      line-height: 1.45;
     }
 
     .empty {
@@ -200,134 +341,226 @@
       padding: 8px 0;
     }
 
-    .actions {
+    .chat-placeholder {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      height: 100%;
     }
 
-    @media (max-width: 700px) {
-      .page {
-        padding: 16px 12px 24px;
+    .chat-stage-header {
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid #edf2f7;
+      background: #fbfdff;
+    }
+
+    .chat-stage-title {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .chat-stage-subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .chat-stage-body {
+      flex: 1;
+      padding: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+
+    .placeholder-card {
+      width: 100%;
+      max-width: 520px;
+      border: 1px dashed #bfd3f8;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.86);
+      padding: 24px;
+      text-align: center;
+    }
+
+    .placeholder-card h3 {
+      margin: 0 0 12px;
+      font-size: 24px;
+    }
+
+    .placeholder-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .mono {
+      font-family: Consolas, monospace;
+      font-size: 13px;
+    }
+
+    @media (max-width: 1100px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar,
+      .main-panel,
+      .rightbar {
+        min-height: auto;
       }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="page-header">
-      <h1>MyChat MVP</h1>
-      <p>Простой интерфейс для ручной проверки авторизации, друзей и личных чатов.</p>
+  <div id="authScreen" class="auth-shell hidden">
+    <div class="auth-card">
+      <h1 class="auth-title">MyChat</h1>
+      <p class="auth-subtitle">Войдите в аккаунт или зарегистрируйтесь, чтобы перейти к друзьям и личным чатам.</p>
+
+      <div class="tabs">
+        <button id="showLoginTabBtn" class="tab-btn active" type="button">Вход</button>
+        <button id="showRegisterTabBtn" class="tab-btn" type="button">Регистрация</button>
+      </div>
+
+      <div id="loginTab" class="auth-form">
+        <div>
+          <label class="field-label" for="loginUsername">Имя пользователя</label>
+          <input id="loginUsername" class="input" type="text" placeholder="Введите имя пользователя" />
+        </div>
+        <div>
+          <label class="field-label" for="loginPassword">Пароль</label>
+          <input id="loginPassword" class="input" type="password" placeholder="Введите пароль" />
+        </div>
+        <button id="loginBtn" class="btn" type="button">Войти</button>
+        <p class="hint">После входа откроется основной экран приложения.</p>
+      </div>
+
+      <div id="registerTab" class="auth-form hidden">
+        <div>
+          <label class="field-label" for="registerUsername">Имя пользователя</label>
+          <input id="registerUsername" class="input" type="text" placeholder="Придумайте имя пользователя" />
+        </div>
+        <div>
+          <label class="field-label" for="registerPassword">Пароль</label>
+          <input id="registerPassword" class="input" type="password" placeholder="Придумайте пароль" />
+        </div>
+        <button id="registerBtn" class="btn" type="button">Зарегистрироваться</button>
+        <p class="hint">После регистрации токен будет сохранён автоматически.</p>
+      </div>
+
+      <div id="authStatus" class="status-box">Экран авторизации готов к работе.</div>
     </div>
+  </div>
 
-    <div class="grid">
-      <section class="card">
-        <h2>Авторизация</h2>
+  <div id="appScreen" class="app-shell hidden">
+    <header class="app-header">
+      <div>
+        <h1>MyChat</h1>
+        <p>Простой интерфейс приложения: чаты слева, диалог по центру, друзья и заявки справа.</p>
+      </div>
+      <div class="header-actions">
+        <div id="currentUserBadge" class="user-pill">Пользователь не определён</div>
+        <button id="refreshMeBtn" class="btn secondary" type="button">Обновить профиль</button>
+        <button id="logoutBtn" class="btn danger" type="button">Выйти</button>
+      </div>
+    </header>
 
-        <div class="section">
-          <h3>Регистрация</h3>
-          <div class="row">
-            <input id="registerUsername" type="text" placeholder="Введите имя пользователя" />
+    <div class="app-layout">
+      <aside class="sidebar">
+        <div class="panel-header">
+          <h2 class="panel-title">Чаты</h2>
+          <p class="panel-subtitle">Здесь отображаются ваши direct chat. Создание нового чата доступно только с другом.</p>
+        </div>
+        <div class="panel-content">
+          <div class="section">
+            <h3 class="section-title">Создать direct chat</h3>
+            <input id="chatTargetUserId" class="input" type="number" placeholder="ID друга" />
+            <div class="section-actions">
+              <button id="createDirectChatBtn" class="btn" type="button">Создать чат</button>
+              <button id="loadChatsBtn" class="btn secondary" type="button">Обновить список</button>
+            </div>
           </div>
-          <div class="row">
-            <input id="registerPassword" type="password" placeholder="Введите пароль" />
-          </div>
-          <div class="row">
-            <button id="registerBtn">Зарегистрироваться</button>
+
+          <div class="section">
+            <h3 class="section-title">Список чатов</h3>
+            <div id="chatsList" class="list"></div>
           </div>
         </div>
+      </aside>
 
-        <div class="section">
-          <h3>Вход</h3>
-          <div class="row">
-            <input id="loginUsername" type="text" placeholder="Имя пользователя для входа" />
+      <main class="main-panel">
+        <div class="chat-placeholder">
+          <div class="chat-stage-header">
+            <h2 id="selectedChatTitle" class="chat-stage-title">Выберите чат</h2>
+            <p id="selectedChatSubtitle" class="chat-stage-subtitle">После выбора чата здесь появится область переписки. Этот этап мы добавим следующим шагом.</p>
           </div>
-          <div class="row">
-            <input id="loginPassword" type="password" placeholder="Пароль для входа" />
-          </div>
-          <div class="row">
-            <button id="loginBtn">Войти</button>
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>Токен и текущий пользователь</h3>
-          <p class="hint">Токен сохраняется в браузере и автоматически используется для защищенных запросов.</p>
-          <div class="row">
-            <button id="meBtn">Показать текущего пользователя</button>
-            <button id="clearTokenBtn" class="danger">Очистить токен</button>
-          </div>
-          <div class="token-box" id="tokenBox">Токен пока отсутствует.</div>
-          <div class="json-box" id="meBox">Данные текущего пользователя еще не загружены.</div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Друзья</h2>
-
-        <div class="section">
-          <h3>Новая заявка в друзья</h3>
-          <p class="hint">Укажите ID пользователя, которому хотите отправить заявку.</p>
-          <div class="row">
-            <input id="friendTargetUserId" type="number" placeholder="ID пользователя" />
-          </div>
-          <div class="row">
-            <button id="sendFriendRequestBtn">Отправить заявку</button>
+          <div class="chat-stage-body">
+            <div class="placeholder-card">
+              <h3 id="placeholderTitle">Сообщения будут следующим этапом</h3>
+              <p id="placeholderText">Сейчас эта центральная колонка подготовлена под будущую переписку. Вы можете выбирать чат слева и управлять друзьями справа.</p>
+            </div>
           </div>
         </div>
+      </main>
 
-        <div class="section">
-          <h3>Управление заявками и друзьями</h3>
-          <div class="row">
-            <button id="loadIncomingBtn">Загрузить входящие заявки</button>
-            <button id="loadOutgoingBtn" class="secondary">Загрузить исходящие заявки</button>
-            <button id="loadFriendsBtn" class="secondary">Загрузить список друзей</button>
-          </div>
-
-          <h3>Входящие заявки</h3>
-          <div class="list" id="incomingList"></div>
-
-          <h3>Исходящие заявки</h3>
-          <div class="list" id="outgoingList"></div>
-
-          <h3>Список друзей</h3>
-          <div class="list" id="friendsList"></div>
+      <aside class="rightbar">
+        <div class="panel-header">
+          <h2 class="panel-title">Друзья и заявки</h2>
+          <p class="panel-subtitle">Отсюда можно отправить заявку, принять входящие заявки и создать основу для личных чатов.</p>
         </div>
-      </section>
-
-      <section class="card">
-        <h2>Личные чаты</h2>
-
-        <div class="section">
-          <h3>Создание личного чата</h3>
-          <p class="hint">Личный чат можно создать только с пользователем из списка друзей.</p>
-          <div class="row">
-            <input id="chatTargetUserId" type="number" placeholder="ID друга" />
+        <div class="panel-content">
+          <div class="section">
+            <h3 class="section-title">Отправить заявку в друзья</h3>
+            <input id="friendTargetUserId" class="input" type="number" placeholder="ID пользователя" />
+            <button id="sendFriendRequestBtn" class="btn" type="button">Отправить заявку</button>
           </div>
-          <div class="row">
-            <button id="createDirectChatBtn">Создать direct chat</button>
+
+          <div class="section">
+            <h3 class="section-title">Входящие заявки</h3>
+            <div class="section-actions">
+              <button id="loadIncomingBtn" class="btn secondary" type="button">Обновить</button>
+            </div>
+            <div id="incomingList" class="list"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section-title">Исходящие заявки</h3>
+            <div class="section-actions">
+              <button id="loadOutgoingBtn" class="btn secondary" type="button">Обновить</button>
+            </div>
+            <div id="outgoingList" class="list"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section-title">Список друзей</h3>
+            <div class="section-actions">
+              <button id="loadFriendsBtn" class="btn secondary" type="button">Обновить</button>
+            </div>
+            <div id="friendsList" class="list"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section-title">Состояние токена и запросов</h3>
+            <div id="tokenBox" class="panel-box mono">Токен пока отсутствует.</div>
+            <div id="meBox" class="panel-box mono">Данные текущего пользователя ещё не загружены.</div>
+            <div id="statusBox" class="status-box">Основной экран готов к работе.</div>
           </div>
         </div>
-
-        <div class="section">
-          <h3>Список чатов</h3>
-          <div class="row">
-            <button id="loadChatsBtn">Загрузить список чатов</button>
-          </div>
-          <div class="list" id="chatsList"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Результат последнего запроса</h2>
-        <p class="hint">Здесь отображаются успешные ответы и ошибки backend.</p>
-        <div class="status-box" id="statusBox">Интерфейс готов к работе.</div>
-      </section>
+      </aside>
     </div>
   </div>
 
   <script>
     const tokenStorageKey = "mychat_access_token";
+
+    const authScreen = document.getElementById("authScreen");
+    const appScreen = document.getElementById("appScreen");
+
+    const showLoginTabBtn = document.getElementById("showLoginTabBtn");
+    const showRegisterTabBtn = document.getElementById("showRegisterTabBtn");
+    const loginTab = document.getElementById("loginTab");
+    const registerTab = document.getElementById("registerTab");
 
     const registerUsernameInput = document.getElementById("registerUsername");
     const registerPasswordInput = document.getElementById("registerPassword");
@@ -338,8 +571,8 @@
 
     const registerBtn = document.getElementById("registerBtn");
     const loginBtn = document.getElementById("loginBtn");
-    const meBtn = document.getElementById("meBtn");
-    const clearTokenBtn = document.getElementById("clearTokenBtn");
+    const refreshMeBtn = document.getElementById("refreshMeBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
     const sendFriendRequestBtn = document.getElementById("sendFriendRequestBtn");
     const loadIncomingBtn = document.getElementById("loadIncomingBtn");
     const loadOutgoingBtn = document.getElementById("loadOutgoingBtn");
@@ -347,19 +580,36 @@
     const createDirectChatBtn = document.getElementById("createDirectChatBtn");
     const loadChatsBtn = document.getElementById("loadChatsBtn");
 
+    const authStatus = document.getElementById("authStatus");
     const tokenBox = document.getElementById("tokenBox");
     const meBox = document.getElementById("meBox");
     const statusBox = document.getElementById("statusBox");
+    const currentUserBadge = document.getElementById("currentUserBadge");
     const incomingList = document.getElementById("incomingList");
     const outgoingList = document.getElementById("outgoingList");
     const friendsList = document.getElementById("friendsList");
     const chatsList = document.getElementById("chatsList");
+    const selectedChatTitle = document.getElementById("selectedChatTitle");
+    const selectedChatSubtitle = document.getElementById("selectedChatSubtitle");
+    const placeholderTitle = document.getElementById("placeholderTitle");
+    const placeholderText = document.getElementById("placeholderText");
+
+    let currentUser = null;
+    let selectedChat = null;
 
     function setStatus(message, type = "") {
       statusBox.textContent = message;
       statusBox.className = "status-box";
       if (type) {
         statusBox.classList.add(type);
+      }
+    }
+
+    function setAuthStatus(message, type = "") {
+      authStatus.textContent = message;
+      authStatus.className = "status-box";
+      if (type) {
+        authStatus.classList.add(type);
       }
     }
 
@@ -374,13 +624,63 @@
 
     function clearToken() {
       localStorage.removeItem(tokenStorageKey);
+      currentUser = null;
+      selectedChat = null;
       renderToken();
-      meBox.textContent = "Данные текущего пользователя еще не загружены.";
+      renderCurrentUser();
+      renderSelectedChat();
+      meBox.textContent = "Данные текущего пользователя ещё не загружены.";
     }
 
     function renderToken() {
       const token = getToken();
       tokenBox.textContent = token || "Токен пока отсутствует.";
+    }
+
+    function renderCurrentUser() {
+      if (currentUser) {
+        currentUserBadge.textContent = `${currentUser.username} (ID=${currentUser.id})`;
+      } else {
+        currentUserBadge.textContent = "Пользователь не определён";
+      }
+    }
+
+    function renderSelectedChat() {
+      if (!selectedChat) {
+        selectedChatTitle.textContent = "Выберите чат";
+        selectedChatSubtitle.textContent = "После выбора чата здесь появится область переписки. Этот этап мы добавим следующим шагом.";
+        placeholderTitle.textContent = "Сообщения будут следующим этапом";
+        placeholderText.textContent = "Сейчас эта центральная колонка подготовлена под будущую переписку. Вы можете выбирать чат слева и управлять друзьями справа.";
+        return;
+      }
+
+      const membersText = selectedChat.members
+        .map((member) => `${member.username} (ID=${member.id})`)
+        .join(", ");
+
+      selectedChatTitle.textContent = `Чат #${selectedChat.id}`;
+      selectedChatSubtitle.textContent = `Тип: ${selectedChat.type}. Участники: ${membersText}`;
+      placeholderTitle.textContent = "Экран диалога подготовлен";
+      placeholderText.textContent = "На следующем этапе здесь появятся сообщения и действия для переписки. Сейчас можно выбрать другой чат или управлять друзьями.";
+    }
+
+    function showAuthScreen(tab = "login") {
+      authScreen.classList.remove("hidden");
+      appScreen.classList.add("hidden");
+      switchAuthTab(tab);
+    }
+
+    function showAppScreen() {
+      authScreen.classList.add("hidden");
+      appScreen.classList.remove("hidden");
+    }
+
+    function switchAuthTab(tab) {
+      const isLogin = tab === "login";
+      loginTab.classList.toggle("hidden", !isLogin);
+      registerTab.classList.toggle("hidden", isLogin);
+      showLoginTabBtn.classList.toggle("active", isLogin);
+      showRegisterTabBtn.classList.toggle("active", !isLogin);
     }
 
     async function apiFetch(path, options = {}) {
@@ -447,15 +747,15 @@
 
       if (withActions && request.status === "pending") {
         const actions = document.createElement("div");
-        actions.className = "actions";
+        actions.className = "section-actions";
 
         const acceptBtn = document.createElement("button");
-        acceptBtn.className = "small";
+        acceptBtn.className = "btn small";
         acceptBtn.textContent = "Принять";
         acceptBtn.addEventListener("click", () => handleAccept(request.id));
 
         const declineBtn = document.createElement("button");
-        declineBtn.className = "small danger";
+        declineBtn.className = "btn small danger";
         declineBtn.textContent = "Отклонить";
         declineBtn.addEventListener("click", () => handleDecline(request.id));
 
@@ -487,18 +787,40 @@
     function createChatCard(chat) {
       const card = document.createElement("div");
       card.className = "item";
+      if (selectedChat && selectedChat.id === chat.id) {
+        card.classList.add("active");
+      }
 
       const title = document.createElement("div");
       title.className = "item-title";
-      title.textContent = `Чат #${chat.id} (${chat.type})`;
+      title.textContent = `Чат #${chat.id}`;
       card.appendChild(title);
 
-      const members = document.createElement("div");
-      members.className = "item-meta";
-      members.textContent = `Участники: ${chat.members.map(member => `${member.username} (ID=${member.id})`).join(", ")}`;
-      card.appendChild(members);
+      const meta = document.createElement("div");
+      meta.className = "item-meta";
+      meta.textContent = `Тип: ${chat.type}. Участники: ${chat.members.map((member) => member.username).join(", ")}`;
+      card.appendChild(meta);
+
+      const selectBtn = document.createElement("button");
+      selectBtn.className = "btn small secondary";
+      selectBtn.type = "button";
+      selectBtn.textContent = "Открыть";
+      selectBtn.addEventListener("click", () => {
+        selectedChat = chat;
+        renderSelectedChat();
+        loadChats().catch(() => {});
+      });
+      card.appendChild(selectBtn);
 
       return card;
+    }
+
+    async function fetchCurrentUser() {
+      const data = await apiFetch("/auth/me");
+      currentUser = data;
+      meBox.textContent = JSON.stringify(data, null, 2);
+      renderCurrentUser();
+      return data;
     }
 
     async function handleRegister() {
@@ -514,14 +836,12 @@
         });
 
         saveToken(data.access_token);
-        meBox.textContent = JSON.stringify(
-          { id: data.user_id, username: data.username },
-          null,
-          2
-        );
-        setStatus(`Регистрация выполнена для пользователя ${data.username} (ID=${data.user_id})`, "ok");
+        setAuthStatus(`Регистрация выполнена для пользователя ${data.username}.`, "ok");
+        showAppScreen();
+        await initializeApp();
+        setStatus(`Добро пожаловать, ${data.username}.`, "ok");
       } catch (error) {
-        setStatus(`Ошибка регистрации: ${error.message}`, "error");
+        setAuthStatus(`Ошибка регистрации: ${error.message}`, "error");
       }
     }
 
@@ -538,24 +858,20 @@
         });
 
         saveToken(data.access_token);
-        meBox.textContent = JSON.stringify(
-          { id: data.user_id, username: data.username },
-          null,
-          2
-        );
-        setStatus(`Вход выполнен для пользователя ${data.username} (ID=${data.user_id})`, "ok");
+        setAuthStatus(`Вход выполнен для пользователя ${data.username}.`, "ok");
+        showAppScreen();
+        await initializeApp();
+        setStatus(`Вы вошли как ${data.username}.`, "ok");
       } catch (error) {
-        setStatus(`Ошибка входа: ${error.message}`, "error");
+        setAuthStatus(`Ошибка входа: ${error.message}`, "error");
       }
     }
 
-    async function handleMe() {
+    async function handleRefreshMe() {
       try {
-        const data = await apiFetch("/auth/me");
-        meBox.textContent = JSON.stringify(data, null, 2);
-        setStatus(`Текущий пользователь: ${data.username}`, "ok");
+        const data = await fetchCurrentUser();
+        setStatus(`Профиль обновлён: ${data.username}.`, "ok");
       } catch (error) {
-        meBox.textContent = "Не удалось получить данные текущего пользователя.";
         setStatus(`Ошибка запроса /auth/me: ${error.message}`, "error");
       }
     }
@@ -570,7 +886,7 @@
           }),
         });
 
-        setStatus(`Заявка в друзья отправлена. Номер заявки: ${data.id}`, "ok");
+        setStatus(`Заявка в друзья отправлена. Номер заявки: ${data.id}.`, "ok");
         await Promise.all([loadOutgoingRequests(), loadIncomingRequests()]);
       } catch (error) {
         setStatus(`Ошибка отправки заявки: ${error.message}`, "error");
@@ -578,48 +894,36 @@
     }
 
     async function loadIncomingRequests() {
-      try {
-        const items = await apiFetch("/friends/requests/incoming");
-        renderList(
-          incomingList,
-          items,
-          (item) => createRequestCard(item, true),
-          "Входящих заявок пока нет."
-        );
-        setStatus("Входящие заявки успешно загружены.", "ok");
-      } catch (error) {
-        setStatus(`Ошибка загрузки входящих заявок: ${error.message}`, "error");
-      }
+      const items = await apiFetch("/friends/requests/incoming");
+      renderList(
+        incomingList,
+        items,
+        (item) => createRequestCard(item, true),
+        "Входящих заявок пока нет."
+      );
+      return items;
     }
 
     async function loadOutgoingRequests() {
-      try {
-        const items = await apiFetch("/friends/requests/outgoing");
-        renderList(
-          outgoingList,
-          items,
-          (item) => createRequestCard(item, false),
-          "Исходящих заявок пока нет."
-        );
-        setStatus("Исходящие заявки успешно загружены.", "ok");
-      } catch (error) {
-        setStatus(`Ошибка загрузки исходящих заявок: ${error.message}`, "error");
-      }
+      const items = await apiFetch("/friends/requests/outgoing");
+      renderList(
+        outgoingList,
+        items,
+        (item) => createRequestCard(item, false),
+        "Исходящих заявок пока нет."
+      );
+      return items;
     }
 
     async function loadFriends() {
-      try {
-        const items = await apiFetch("/friends");
-        renderList(
-          friendsList,
-          items,
-          createFriendCard,
-          "Список друзей пока пуст."
-        );
-        setStatus("Список друзей успешно загружен.", "ok");
-      } catch (error) {
-        setStatus(`Ошибка загрузки списка друзей: ${error.message}`, "error");
-      }
+      const items = await apiFetch("/friends");
+      renderList(
+        friendsList,
+        items,
+        createFriendCard,
+        "Список друзей пока пуст."
+      );
+      return items;
     }
 
     async function handleAccept(requestId) {
@@ -652,7 +956,9 @@
           }),
         });
 
-        setStatus(`Личный чат готов. ID чата: ${data.id}`, "ok");
+        selectedChat = data;
+        renderSelectedChat();
+        setStatus(`Личный чат готов. ID чата: ${data.id}.`, "ok");
         await loadChats();
       } catch (error) {
         setStatus(`Ошибка создания личного чата: ${error.message}`, "error");
@@ -660,35 +966,96 @@
     }
 
     async function loadChats() {
+      const items = await apiFetch("/chats");
+      renderList(
+        chatsList,
+        items,
+        createChatCard,
+        "Список чатов пока пуст."
+      );
+      return items;
+    }
+
+    async function initializeApp() {
+      renderToken();
+      renderSelectedChat();
+      await fetchCurrentUser();
+      await Promise.all([loadIncomingRequests(), loadOutgoingRequests(), loadFriends(), loadChats()]);
+    }
+
+    function handleLogout() {
+      clearToken();
+      incomingList.innerHTML = "";
+      outgoingList.innerHTML = "";
+      friendsList.innerHTML = "";
+      chatsList.innerHTML = "";
+      setAuthStatus("Вы вышли из аккаунта.", "ok");
+      showAuthScreen("login");
+    }
+
+    showLoginTabBtn.addEventListener("click", () => switchAuthTab("login"));
+    showRegisterTabBtn.addEventListener("click", () => switchAuthTab("register"));
+    registerBtn.addEventListener("click", handleRegister);
+    loginBtn.addEventListener("click", handleLogin);
+    refreshMeBtn.addEventListener("click", handleRefreshMe);
+    logoutBtn.addEventListener("click", handleLogout);
+    sendFriendRequestBtn.addEventListener("click", handleSendFriendRequest);
+    loadIncomingBtn.addEventListener("click", async () => {
       try {
-        const items = await apiFetch("/chats");
-        renderList(
-          chatsList,
-          items,
-          createChatCard,
-          "Список чатов пока пуст."
-        );
-        setStatus("Список чатов успешно загружен.", "ok");
+        await loadIncomingRequests();
+        setStatus("Входящие заявки обновлены.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки входящих заявок: ${error.message}`, "error");
+      }
+    });
+    loadOutgoingBtn.addEventListener("click", async () => {
+      try {
+        await loadOutgoingRequests();
+        setStatus("Исходящие заявки обновлены.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки исходящих заявок: ${error.message}`, "error");
+      }
+    });
+    loadFriendsBtn.addEventListener("click", async () => {
+      try {
+        await loadFriends();
+        setStatus("Список друзей обновлён.", "ok");
+      } catch (error) {
+        setStatus(`Ошибка загрузки списка друзей: ${error.message}`, "error");
+      }
+    });
+    createDirectChatBtn.addEventListener("click", handleCreateDirectChat);
+    loadChatsBtn.addEventListener("click", async () => {
+      try {
+        await loadChats();
+        setStatus("Список чатов обновлён.", "ok");
       } catch (error) {
         setStatus(`Ошибка загрузки списка чатов: ${error.message}`, "error");
       }
+    });
+
+    async function bootstrap() {
+      renderToken();
+      renderCurrentUser();
+      renderSelectedChat();
+
+      if (!getToken()) {
+        showAuthScreen("login");
+        return;
+      }
+
+      try {
+        showAppScreen();
+        await initializeApp();
+        setStatus("Основной экран загружен.", "ok");
+      } catch (error) {
+        clearToken();
+        showAuthScreen("login");
+        setAuthStatus(`Сохранённый токен недействителен: ${error.message}`, "error");
+      }
     }
 
-    registerBtn.addEventListener("click", handleRegister);
-    loginBtn.addEventListener("click", handleLogin);
-    meBtn.addEventListener("click", handleMe);
-    clearTokenBtn.addEventListener("click", () => {
-      clearToken();
-      setStatus("Токен очищен.", "ok");
-    });
-    sendFriendRequestBtn.addEventListener("click", handleSendFriendRequest);
-    loadIncomingBtn.addEventListener("click", loadIncomingRequests);
-    loadOutgoingBtn.addEventListener("click", loadOutgoingRequests);
-    loadFriendsBtn.addEventListener("click", loadFriends);
-    createDirectChatBtn.addEventListener("click", handleCreateDirectChat);
-    loadChatsBtn.addEventListener("click", loadChats);
-
-    renderToken();
+    bootstrap();
   </script>
 </body>
 </html>
