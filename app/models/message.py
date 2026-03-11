@@ -8,4 +8,5 @@ class Message(SQLModel, table=True):
     text: str
     room: str
     user_id: int
+    chat_id: Optional[int] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

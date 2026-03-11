@@ -7,13 +7,15 @@ from sqlmodel import Session, SQLModel, create_engine, select
 import app.db as db_module
 from app.models.chat import Chat
 from app.models.chat_member import ChatMember
+from app.models.message import Message
 from app.models.user import User
 from app.routers.auth import get_current_user, register
-from app.routers.chats import create_direct_chat, get_chats
+from app.routers.chats import create_direct_chat, get_chat_messages, get_chats, send_chat_message
 from app.routers.friends import accept_friend_request, create_friend_request
 from app.schemas.auth import RegisterRequest
 from app.schemas.chat import DirectChatCreate
 from app.schemas.friend_request import FriendRequestCreate
+from app.schemas.message import ChatMessageCreate
 
 
 class DirectChatsTests(unittest.TestCase):
@@ -233,6 +235,156 @@ class DirectChatsTests(unittest.TestCase):
 
         self.assertEqual(exc_info.exception.status_code, 401)
         self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_send_chat_message_success(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            message = send_chat_message(
+                chat.id,
+                ChatMessageCreate(text="Привет, Bob"),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        self.assertEqual(message.chat_id, chat.id)
+        self.assertEqual(message.user_id, alice.user_id)
+        self.assertEqual(message.text, "Привет, Bob")
+
+        with Session(self.engine) as session:
+            stored = session.exec(select(Message).where(Message.chat_id == chat.id)).first()
+
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.room, f"chat:{chat.id}")
+
+    def test_get_chat_messages_success(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            send_chat_message(
+                chat.id,
+                ChatMessageCreate(text="Первое сообщение"),
+                session.get(User, alice.user_id),
+                session,
+            )
+            send_chat_message(
+                chat.id,
+                ChatMessageCreate(text="Ответ"),
+                session.get(User, bob.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            history = get_chat_messages(
+                chat.id,
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0].text, "Первое сообщение")
+        self.assertEqual(history[1].text, "Ответ")
+
+    def test_cannot_read_foreign_chat(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_chat_messages(
+                    chat.id,
+                    session.get(User, charlie.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 403)
+        self.assertEqual(exc_info.exception.detail, "access to this chat is forbidden")
+
+    def test_cannot_write_foreign_chat(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                send_chat_message(
+                    chat.id,
+                    ChatMessageCreate(text="Чужое сообщение"),
+                    session.get(User, charlie.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 403)
+        self.assertEqual(exc_info.exception.detail, "access to this chat is forbidden")
+
+    def test_chat_message_endpoints_require_authentication(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_current_user(None, session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_chat_message_endpoints_return_not_found_for_missing_chat(self):
+        alice = self.create_user("alice")
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                get_chat_messages(
+                    999999,
+                    session.get(User, alice.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 404)
+        self.assertEqual(exc_info.exception.detail, "chat not found")
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                send_chat_message(
+                    999999,
+                    ChatMessageCreate(text="Нет такого чата"),
+                    session.get(User, alice.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 404)
+        self.assertEqual(exc_info.exception.detail, "chat not found")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,11 @@ from app.db import get_session
 from app.models.chat import Chat
 from app.models.chat_member import ChatMember
 from app.models.friendship import Friendship
+from app.models.message import Message
 from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.chat import ChatRead, DirectChatCreate
+from app.schemas.message import ChatMessageCreate, ChatMessageRead
 from app.schemas.user import UserRead
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -31,6 +33,25 @@ def build_chat_read(session: Session, chat: Chat) -> ChatRead:
         created_at=chat.created_at,
         members=[UserRead(id=member.id, username=member.username) for member in members],
     )
+
+
+def get_chat_for_user(session: Session, chat_id: int, current_user_id: int) -> Chat:
+    chat = session.get(Chat, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="chat not found")
+
+    membership = session.exec(
+        select(ChatMember).where(
+            and_(
+                ChatMember.chat_id == chat_id,
+                ChatMember.user_id == current_user_id,
+            )
+        )
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="access to this chat is forbidden")
+
+    return chat
 
 
 @router.get("", response_model=list[ChatRead])
@@ -100,3 +121,61 @@ def create_direct_chat(
     session.refresh(chat)
 
     return build_chat_read(session, chat)
+
+
+@router.get("/{chat_id}/messages", response_model=list[ChatMessageRead])
+def get_chat_messages(
+    chat_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    get_chat_for_user(session, chat_id, current_user.id)
+
+    messages = session.exec(
+        select(Message)
+        .where(Message.chat_id == chat_id)
+        .order_by(Message.id.asc())
+    ).all()
+
+    return [
+        ChatMessageRead(
+            id=message.id,
+            chat_id=message.chat_id,
+            user_id=message.user_id,
+            text=message.text,
+            created_at=message.created_at,
+        )
+        for message in messages
+    ]
+
+
+@router.post("/{chat_id}/messages", response_model=ChatMessageRead)
+def send_chat_message(
+    chat_id: int,
+    payload: ChatMessageCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    get_chat_for_user(session, chat_id, current_user.id)
+
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="message text must not be empty")
+
+    message = Message(
+        user_id=current_user.id,
+        text=text,
+        room=f"chat:{chat_id}",
+        chat_id=chat_id,
+    )
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+
+    return ChatMessageRead(
+        id=message.id,
+        chat_id=message.chat_id,
+        user_id=message.user_id,
+        text=message.text,
+        created_at=message.created_at,
+    )
