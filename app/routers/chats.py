@@ -6,12 +6,12 @@ from app.db import get_session
 from app.models.chat import Chat
 from app.models.chat_member import ChatMember
 from app.models.friendship import Friendship
-from app.models.message import Message
 from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.chat import ChatRead, DirectChatCreate
 from app.schemas.message import ChatMessageCreate, ChatMessageRead
 from app.schemas.user import UserRead
+from app.services.messages import get_chat_history, save_chat_message
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -131,11 +131,7 @@ def get_chat_messages(
 ):
     get_chat_for_user(session, chat_id, current_user.id)
 
-    messages = session.exec(
-        select(Message)
-        .where(Message.chat_id == chat_id)
-        .order_by(Message.id.asc())
-    ).all()
+    messages = get_chat_history(session, chat_id=chat_id)
 
     return [
         ChatMessageRead(
@@ -162,15 +158,12 @@ def send_chat_message(
     if not text:
         raise HTTPException(status_code=400, detail="message text must not be empty")
 
-    message = Message(
+    message = save_chat_message(
+        session,
+        chat_id=chat_id,
         user_id=current_user.id,
         text=text,
-        room=f"chat:{chat_id}",
-        chat_id=chat_id,
     )
-    session.add(message)
-    session.commit()
-    session.refresh(message)
 
     return ChatMessageRead(
         id=message.id,

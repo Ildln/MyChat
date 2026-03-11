@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 
 from fastapi import HTTPException
 from sqlalchemy.pool import StaticPool
@@ -12,11 +13,25 @@ from app.models.user import User
 from app.routers.auth import get_current_user, register
 from app.routers.chats import create_direct_chat, get_chat_messages, get_chats, send_chat_message
 from app.routers.friends import accept_friend_request, create_friend_request
-from app.routers.ws import verify_chat_ws_access
+from app.routers.ws import handle_chat_ws_message, verify_chat_ws_access
 from app.schemas.auth import RegisterRequest
 from app.schemas.chat import DirectChatCreate
 from app.schemas.friend_request import FriendRequestCreate
 from app.schemas.message import ChatMessageCreate
+from app.services.messages import build_chat_room
+from app.services.ws_manager import manager
+
+
+class FakeWebSocket:
+    def __init__(self):
+        self.accepted = False
+        self.messages = []
+
+    async def accept(self):
+        self.accepted = True
+
+    async def send_json(self, message):
+        self.messages.append(message)
 
 
 class DirectChatsTests(unittest.TestCase):
@@ -29,8 +44,12 @@ class DirectChatsTests(unittest.TestCase):
         self.original_engine = db_module.engine
         db_module.engine = self.engine
         SQLModel.metadata.create_all(self.engine)
+        manager.rooms.clear()
+        manager.ws_user.clear()
 
     def tearDown(self):
+        manager.rooms.clear()
+        manager.ws_user.clear()
         self.engine.dispose()
         db_module.engine = self.original_engine
 
@@ -467,6 +486,107 @@ class DirectChatsTests(unittest.TestCase):
 
         self.assertEqual(exc_info.exception.status_code, 404)
         self.assertEqual(exc_info.exception.detail, "chat not found")
+
+    def test_ws_chat_message_is_saved(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            response = handle_chat_ws_message(
+                session,
+                chat.id,
+                alice.user_id,
+                {"text": "Привет через WebSocket"},
+            )
+
+        self.assertIsNotNone(response)
+        self.assertEqual(response["type"], "message")
+        self.assertEqual(response["chat_id"], chat.id)
+        self.assertEqual(response["user_id"], alice.user_id)
+        self.assertEqual(response["text"], "Привет через WebSocket")
+
+        with Session(self.engine) as session:
+            stored = session.exec(select(Message).where(Message.chat_id == chat.id)).all()
+
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].room, build_chat_room(chat.id))
+        self.assertEqual(stored[0].text, "Привет через WebSocket")
+
+    def test_ws_chat_message_reaches_other_chat_member(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+            payload = handle_chat_ws_message(
+                session,
+                chat.id,
+                alice.user_id,
+                {"text": "Сообщение для участников"},
+            )
+
+        first_socket = FakeWebSocket()
+        second_socket = FakeWebSocket()
+        room = build_chat_room(chat.id)
+        asyncio.run(manager.connect(room, first_socket))
+        asyncio.run(manager.connect(room, second_socket))
+
+        asyncio.run(manager.broadcast(room, payload))
+
+        self.assertEqual(len(first_socket.messages), 1)
+        self.assertEqual(len(second_socket.messages), 1)
+        self.assertEqual(first_socket.messages[0]["text"], "Сообщение для участников")
+        self.assertEqual(second_socket.messages[0]["chat_id"], chat.id)
+
+    def test_ws_chat_message_does_not_reach_another_chat(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        dave = self.create_user("dave")
+        self.make_friends(alice.user_id, bob.user_id)
+        self.make_friends(charlie.user_id, dave.user_id)
+
+        with Session(self.engine) as session:
+            first_chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+            second_chat = create_direct_chat(
+                DirectChatCreate(user_id=dave.user_id),
+                session.get(User, charlie.user_id),
+                session,
+            )
+            payload = handle_chat_ws_message(
+                session,
+                first_chat.id,
+                alice.user_id,
+                {"text": "Сообщение только в первый чат"},
+            )
+
+        first_chat_socket = FakeWebSocket()
+        second_chat_socket = FakeWebSocket()
+
+        asyncio.run(manager.connect(build_chat_room(first_chat.id), first_chat_socket))
+        asyncio.run(manager.connect(build_chat_room(second_chat.id), second_chat_socket))
+        asyncio.run(manager.broadcast(build_chat_room(first_chat.id), payload))
+
+        self.assertEqual(len(first_chat_socket.messages), 1)
+        self.assertEqual(first_chat_socket.messages[0]["chat_id"], first_chat.id)
+        self.assertEqual(second_chat_socket.messages, [])
 
 
 if __name__ == "__main__":
