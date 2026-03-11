@@ -1,12 +1,13 @@
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from jose import jwt, JWTError
-from pyasn1.type.constraint import ValueRangeConstraint
 
-SECRET_KEY = "CHANGE_ME_TO_SOMETHING_RANDOM"
+from jose import jwt, JWTError
+
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me-before-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 PASSWORD_HASH_ITERATIONS = 100_000
@@ -57,6 +58,7 @@ def create_access_token(*, sub: str, expires_minutes: int = ACCESS_TOKEN_EXPIRE_
         "exp": int((now + timedelta(minutes=expires_minutes)).timestamp()),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def verify_token(token: str) -> str:
     try:
