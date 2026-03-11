@@ -358,6 +358,7 @@
           <div class="chat-stage-header">
             <h2 id="selectedChatTitle" class="chat-stage-title">Выберите чат</h2>
             <p id="selectedChatSubtitle" class="chat-stage-subtitle">Откройте чат слева, чтобы загрузить историю и отправлять сообщения.</p>
+            <p id="connectionStatus" class="hint">Выберите чат, чтобы подключить realtime-обновление.</p>
           </div>
 
           <div id="messagesList" class="chat-stage-body"></div>
@@ -458,10 +459,14 @@
     const selectedChatSubtitle = document.getElementById("selectedChatSubtitle");
     const messagesList = document.getElementById("messagesList");
     const composerHint = document.getElementById("composerHint");
+    const connectionStatus = document.getElementById("connectionStatus");
 
     let currentUser = null;
     let selectedChat = null;
     let selectedChatId = null;
+    let chatSocket = null;
+    let chatSocketChatId = null;
+    let renderedMessageIds = new Set();
 
     function setStatus(message, type = "") {
       statusBox.textContent = message;
@@ -489,10 +494,12 @@
     }
 
     function clearToken() {
+      closeChatSocket({ resetStatus: true });
       localStorage.removeItem(tokenStorageKey);
       currentUser = null;
       selectedChat = null;
       selectedChatId = null;
+      renderedMessageIds = new Set();
       renderToken();
       renderCurrentUser();
       renderSelectedChat();
@@ -513,6 +520,14 @@
       sendMessageBtn.disabled = !enabled;
     }
 
+    function setConnectionStatus(message, type = "") {
+      connectionStatus.textContent = message;
+      connectionStatus.className = "hint";
+      if (type) {
+        connectionStatus.classList.add(type);
+      }
+    }
+
     function renderMessagesEmpty(title, text) {
       messagesList.innerHTML = "";
       const card = document.createElement("div");
@@ -531,6 +546,7 @@
         selectedChatTitle.textContent = "Выберите чат";
         selectedChatSubtitle.textContent = "Откройте чат слева, чтобы загрузить историю и отправлять сообщения.";
         composerHint.textContent = "Сначала выберите чат, затем можно будет отправить сообщение.";
+        setConnectionStatus("Выберите чат, чтобы подключить realtime-обновление.");
         setComposerEnabled(false);
         renderMessagesEmpty("Чат не выбран", "Выберите direct chat в левой колонке. После этого здесь появится история переписки и форма отправки сообщения.");
         return;
@@ -539,12 +555,50 @@
       const membersText = selectedChat.members.map((member) => `${member.username} (ID=${member.id})`).join(", ");
       selectedChatTitle.textContent = `Чат #${selectedChat.id}`;
       selectedChatSubtitle.textContent = `Тип: ${selectedChat.type}. Участники: ${membersText}`;
-      composerHint.textContent = "Введите сообщение и нажмите кнопку отправки. История обновляется через REST-запросы.";
+      composerHint.textContent = "Введите сообщение и нажмите кнопку отправки. При активном соединении новые сообщения приходят сразу.";
       setComposerEnabled(true);
+    }
+
+    function renderMessageBubble(item, append = true) {
+      const bubble = document.createElement("div");
+      bubble.className = "message";
+      bubble.dataset.messageId = String(item.id);
+      if (currentUser && item.user_id === currentUser.id) {
+        bubble.classList.add("mine");
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "message-meta";
+      meta.textContent = `user_id=${item.user_id} • ${item.created_at}`;
+      const text = document.createElement("div");
+      text.textContent = item.text;
+      bubble.appendChild(meta);
+      bubble.appendChild(text);
+      messagesList.appendChild(bubble);
+
+      if (append) {
+        messagesList.scrollTop = messagesList.scrollHeight;
+      }
+    }
+
+    function appendMessageIfNeeded(item) {
+      if (!item || item.chat_id !== selectedChatId || renderedMessageIds.has(item.id)) {
+        return false;
+      }
+
+      const emptyState = messagesList.querySelector(".message-empty");
+      if (emptyState) {
+        messagesList.innerHTML = "";
+      }
+
+      renderedMessageIds.add(item.id);
+      renderMessageBubble(item);
+      return true;
     }
 
     function renderMessages(items) {
       messagesList.innerHTML = "";
+      renderedMessageIds = new Set();
       if (!selectedChatId) {
         renderMessagesEmpty("Чат не выбран", "Выберите direct chat в левой колонке. После этого здесь появится история переписки и форма отправки сообщения.");
         return;
@@ -556,23 +610,90 @@
       }
 
       for (const item of items) {
-        const bubble = document.createElement("div");
-        bubble.className = "message";
-        if (currentUser && item.user_id === currentUser.id) {
-          bubble.classList.add("mine");
-        }
-
-        const meta = document.createElement("div");
-        meta.className = "message-meta";
-        meta.textContent = `user_id=${item.user_id} • ${item.created_at}`;
-        const text = document.createElement("div");
-        text.textContent = item.text;
-        bubble.appendChild(meta);
-        bubble.appendChild(text);
-        messagesList.appendChild(bubble);
+        renderedMessageIds.add(item.id);
+        renderMessageBubble(item, false);
       }
 
       messagesList.scrollTop = messagesList.scrollHeight;
+    }
+
+    function closeChatSocket(options = {}) {
+      const { resetStatus = false } = options;
+      if (chatSocket) {
+        chatSocket.close();
+      }
+      chatSocket = null;
+      chatSocketChatId = null;
+      if (resetStatus) {
+        setConnectionStatus("Выберите чат, чтобы подключить realtime-обновление.");
+      }
+    }
+
+    function getChatSocketUrl(chatId) {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const token = encodeURIComponent(getToken());
+      return `${protocol}://${window.location.host}/ws/chats/${chatId}?token=${token}`;
+    }
+
+    function openChatSocket(chatId) {
+      if (!chatId || !getToken()) {
+        return;
+      }
+
+      closeChatSocket();
+      setConnectionStatus("Подключаем realtime-соединение...");
+
+      const socket = new WebSocket(getChatSocketUrl(chatId));
+      chatSocket = socket;
+      chatSocketChatId = chatId;
+
+      socket.addEventListener("open", () => {
+        if (chatSocket !== socket || selectedChatId !== chatId) {
+          return;
+        }
+        setConnectionStatus("Соединение активно.", "ok");
+      });
+
+      socket.addEventListener("message", (event) => {
+        if (chatSocket !== socket || selectedChatId !== chatId) {
+          return;
+        }
+
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "message") {
+            if (appendMessageIfNeeded(payload)) {
+              setConnectionStatus("Соединение активно.", "ok");
+            }
+            return;
+          }
+
+          if (payload.type === "history") {
+            setConnectionStatus("Соединение активно. История синхронизирована.", "ok");
+          }
+        } catch {
+          setStatus("Не удалось обработать сообщение из realtime-канала.", "error");
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (chatSocket !== socket) {
+          return;
+        }
+
+        chatSocket = null;
+        chatSocketChatId = null;
+        if (selectedChatId === chatId) {
+          setConnectionStatus("Соединение закрыто. Используется обычный режим.");
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        if (chatSocket !== socket || selectedChatId !== chatId) {
+          return;
+        }
+        setConnectionStatus("Realtime недоступен. Используется обычный режим.");
+      });
     }
     function showAuthScreen(tab = "login") {
       authScreen.classList.remove("hidden");
@@ -819,6 +940,7 @@
         setStatus(`Личный чат готов. ID чата: ${data.id}.`, "ok");
         await loadChats();
         await loadMessagesForSelectedChat();
+        openChatSocket(data.id);
       } catch (error) {
         setStatus(`Ошибка создания личного чата: ${error.message}`, "error");
       }
@@ -831,11 +953,13 @@
     }
 
     async function openChat(chat) {
+      closeChatSocket();
       selectedChat = chat;
       selectedChatId = chat.id;
       renderSelectedChat();
       await loadChats();
       await loadMessagesForSelectedChat();
+      openChatSocket(chat.id);
       setStatus(`Открыт чат #${chat.id}.`, "ok");
     }
 
@@ -850,8 +974,16 @@
         renderMessages(items);
       } catch (error) {
         renderMessagesEmpty("Не удалось загрузить сообщения", "Попробуйте открыть чат ещё раз или обновить страницу.");
+        renderedMessageIds = new Set();
         setStatus(`Ошибка загрузки истории сообщений: ${error.message}`, "error");
       }
+    }
+
+    function hasActiveSocketForSelectedChat() {
+      return chatSocket
+        && selectedChatId
+        && chatSocketChatId === selectedChatId
+        && chatSocket.readyState === WebSocket.OPEN;
     }
 
     async function handleSendMessage() {
@@ -867,6 +999,13 @@
       }
 
       try {
+        if (hasActiveSocketForSelectedChat()) {
+          chatSocket.send(JSON.stringify({ text }));
+          messageInput.value = "";
+          setStatus("Сообщение отправлено через realtime-соединение.", "ok");
+          return;
+        }
+
         await apiFetch(`/chats/${selectedChatId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -875,7 +1014,8 @@
         messageInput.value = "";
         await loadMessagesForSelectedChat();
         await loadChats();
-        setStatus("Сообщение отправлено.", "ok");
+        setConnectionStatus("Realtime недоступен. Используется обычный режим.");
+        setStatus("Сообщение отправлено через обычный REST-режим.", "ok");
       } catch (error) {
         setStatus(`Ошибка отправки сообщения: ${error.message}`, "error");
       }
