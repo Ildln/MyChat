@@ -1,12 +1,39 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import engine
+from app.models.chat import Chat
+from app.models.chat_member import ChatMember
 from app.services.ws_manager import manager
 from app.services.messages import get_room_history, save_message
 from app.core.security import verify_token
 
 router = APIRouter(tags=["ws"])
+
+
+def verify_chat_ws_access(session: Session, chat_id: int, token: str | None) -> int:
+    if not token:
+        raise ValueError("missing token")
+
+    try:
+        user_id = int(verify_token(token))
+    except Exception as exc:
+        raise ValueError("invalid token") from exc
+
+    chat = session.get(Chat, chat_id)
+    if not chat:
+        raise LookupError("chat not found")
+
+    membership = session.exec(
+        select(ChatMember).where(
+            ChatMember.chat_id == chat_id,
+            ChatMember.user_id == user_id,
+        )
+    ).first()
+    if not membership:
+        raise PermissionError("chat access forbidden")
+
+    return user_id
 
 
 @router.websocket("/ws/{room}")
@@ -65,3 +92,28 @@ async def ws_room(websocket: WebSocket, room: str):
             "room": room,
             "users": manager.get_online_users(room),
         })
+
+
+@router.websocket("/ws/chats/{chat_id}")
+async def ws_chat(websocket: WebSocket, chat_id: int):
+    token = websocket.query_params.get("token")
+    session = Session(engine)
+    try:
+        try:
+            user_id = verify_chat_ws_access(session, chat_id, token)
+        except (ValueError, LookupError, PermissionError):
+            await websocket.close(code=1008)
+            return
+
+        room = f"chat:{chat_id}"
+        await manager.connect(room, websocket)
+        manager.set_user(websocket, user_id)
+
+        while True:
+            await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        session.close()
+        manager.disconnect(f"chat:{chat_id}", websocket)

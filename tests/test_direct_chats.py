@@ -12,6 +12,7 @@ from app.models.user import User
 from app.routers.auth import get_current_user, register
 from app.routers.chats import create_direct_chat, get_chat_messages, get_chats, send_chat_message
 from app.routers.friends import accept_friend_request, create_friend_request
+from app.routers.ws import verify_chat_ws_access
 from app.schemas.auth import RegisterRequest
 from app.schemas.chat import DirectChatCreate
 from app.schemas.friend_request import FriendRequestCreate
@@ -373,6 +374,87 @@ class DirectChatsTests(unittest.TestCase):
 
         self.assertEqual(exc_info.exception.status_code, 404)
         self.assertEqual(exc_info.exception.detail, "chat not found")
+
+    def test_ws_chat_allows_chat_member(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            user_id = verify_chat_ws_access(session, chat.id, alice.access_token)
+
+        self.assertEqual(user_id, alice.user_id)
+
+    def test_ws_chat_rejects_without_token(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(ValueError) as exc_info:
+                verify_chat_ws_access(session, chat.id, None)
+
+        self.assertEqual(str(exc_info.exception), "missing token")
+
+    def test_ws_chat_rejects_invalid_token(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(ValueError) as exc_info:
+                verify_chat_ws_access(session, chat.id, "invalid-token")
+
+        self.assertEqual(str(exc_info.exception), "invalid token")
+
+    def test_ws_chat_rejects_user_without_membership(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            chat = create_direct_chat(
+                DirectChatCreate(user_id=bob.user_id),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            with self.assertRaises(PermissionError) as exc_info:
+                verify_chat_ws_access(session, chat.id, charlie.access_token)
+
+        self.assertEqual(str(exc_info.exception), "chat access forbidden")
+
+    def test_ws_chat_rejects_missing_chat(self):
+        alice = self.create_user("alice")
+
+        with Session(self.engine) as session:
+            with self.assertRaises(LookupError) as exc_info:
+                verify_chat_ws_access(session, 999999, alice.access_token)
+
+        self.assertEqual(str(exc_info.exception), "chat not found")
 
         with Session(self.engine) as session:
             with self.assertRaises(HTTPException) as exc_info:
