@@ -1,10 +1,5 @@
-import { clearAccessToken, getAccessToken, setAccessToken } from "../lib/storage";
+import { useAuthContext } from "../app/AuthProvider";
 
 export function useAuth() {
-  return {
-    getToken: getAccessToken,
-    setToken: setAccessToken,
-    logout: clearAccessToken,
-    isAuthenticated: Boolean(getAccessToken()),
-  };
+  return useAuthContext();
 }

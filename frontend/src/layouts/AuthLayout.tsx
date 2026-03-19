@@ -8,7 +8,7 @@ export function AuthLayout() {
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-semibold tracking-tight">MyChat</h1>
             <p className="mt-3 text-sm leading-6 text-zinc-400">
-              Новый frontend для MyChat. На следующем шаге сюда будет подключен рабочий auth flow.
+              Войдите в аккаунт или зарегистрируйтесь, чтобы открыть чаты, заявки и профиль.
             </p>
           </div>
           <Outlet />
