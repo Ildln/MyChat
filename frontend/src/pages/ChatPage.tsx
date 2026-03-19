@@ -20,12 +20,9 @@ export function ChatPage() {
     [chats, numericChatId],
   );
 
-  const {
-    messages,
-    isLoading,
-    connectionStatus,
-    sendMessage,
-  } = useChatSession(Number.isNaN(numericChatId) ? null : numericChatId);
+  const { messages, isLoading, connectionStatus, sendMessage } = useChatSession(
+    Number.isNaN(numericChatId) ? null : numericChatId,
+  );
 
   useEffect(() => {
     async function loadChatsList() {
@@ -41,25 +38,23 @@ export function ChatPage() {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-73px)] w-full max-w-5xl p-4 md:p-6">
-      <div className="flex w-full flex-col gap-4">
-        {status ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-300">
-            {status}
-          </div>
-        ) : null}
-        <ChatConversationPanel
-          chat={selectedChat}
-          connectionStatus={connectionStatus}
-          currentUser={user}
-          emptyText="Этот чат не найден или недоступен."
-          emptyTitle="Чат недоступен"
-          isLoading={isLoading}
-          messages={messages}
-          onBack={() => navigate("/")}
-          onSendMessage={sendMessage}
-        />
-      </div>
+    <div className="min-h-screen bg-[#09090a] text-zinc-50">
+      {status ? (
+        <div className="fixed left-1/2 top-4 z-40 w-[min(560px,calc(100%-32px))] -translate-x-1/2 rounded-[18px] border border-white/8 bg-[#141416] px-4 py-3 text-sm text-zinc-300 shadow-2xl shadow-black/30">
+          {status}
+        </div>
+      ) : null}
+      <ChatConversationPanel
+        chat={selectedChat}
+        connectionStatus={connectionStatus}
+        currentUser={user}
+        emptyText="Этот чат не найден или недоступен."
+        emptyTitle="Чат недоступен"
+        isLoading={isLoading}
+        messages={messages}
+        onBack={() => navigate("/")}
+        onSendMessage={sendMessage}
+      />
     </div>
   );
 }

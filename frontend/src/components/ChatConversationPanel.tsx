@@ -1,6 +1,8 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from "react";
+﻿import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { formatMessageTime } from "../lib/format";
 import { getChatTitle } from "../lib/chat";
+import { UserAvatar } from "./UserAvatar";
 import type { Chat } from "../types/chat";
 import type { ChatMessage } from "../types/message";
 import type { User } from "../types/user";
@@ -33,6 +35,8 @@ export function ChatConversationPanel({
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const companion = chat?.members.find((member) => member.id !== currentUser?.id) || chat?.members[0] || null;
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -59,90 +63,99 @@ export function ChatConversationPanel({
 
   const isComposerDisabled = !chat || isSending;
 
+  if (!chat) {
+    return (
+      <section className="flex min-h-screen flex-col bg-[#09090a] text-zinc-50">
+        <div className="border-b border-white/6 px-5 py-5 md:px-10 md:py-6">
+          <div className="text-lg font-semibold text-white">{emptyTitle}</div>
+          <div className="mt-2 text-sm text-zinc-400">{emptyText}</div>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-3xl border border-zinc-800 bg-zinc-900">
-      <div className="border-b border-zinc-800 p-4 md:p-5">
-        <div className="flex items-center gap-3">
+    <section className="flex min-h-screen flex-col bg-[#09090a] text-zinc-50">
+      <header className="sticky top-0 z-10 border-b border-white/6 bg-[#09090a]/95 px-5 py-5 backdrop-blur md:px-10 md:py-6">
+        <div className="flex items-center gap-4">
           {onBack ? (
             <button
-              className="rounded-full border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-white transition hover:bg-white/5"
               onClick={onBack}
               type="button"
             >
-              Назад
+              ←
             </button>
           ) : null}
+          {companion ? <UserAvatar name={companion.username} seed={companion.id} size="md" /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">
+            <div className="truncate text-[24px] font-semibold text-white md:text-[28px]">
               {chat ? getChatTitle(chat, currentUser?.id) : emptyTitle}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-400">
-              {chat ? connectionStatus : emptyText}
-            </p>
+            </div>
+            <div className="mt-1 text-sm text-zinc-400">в сети</div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4 md:p-5">
-        {!chat ? (
-          <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">
-            {emptyText}
-          </div>
-        ) : isLoading ? (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-            Загружаем историю сообщений...
-          </div>
+      <div className="px-5 pt-4 text-sm text-zinc-500 md:px-10">{connectionStatus}</div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-6 md:px-10 md:py-8">
+        {isLoading ? (
+          <div className="flex h-full items-center justify-center text-sm text-zinc-500">Загружаем историю сообщений...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">
             В этом чате пока нет сообщений. Отправьте первое сообщение.
           </div>
         ) : (
-          messages.map((message) => {
-            const isMine = currentUser?.id === message.user_id;
-            return (
-              <div className={`flex ${isMine ? "justify-end" : "justify-start"}`} key={message.id}>
-                <div
-                  className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm md:max-w-[70%] ${
-                    isMine
-                      ? "rounded-br-md bg-white text-zinc-950"
-                      : "rounded-bl-md border border-zinc-800 bg-zinc-950 text-zinc-100"
-                  }`}
-                >
-                  <div className="mb-1 text-xs opacity-70">user_id={message.user_id}</div>
-                  <div className="whitespace-pre-wrap break-words leading-6">{message.text}</div>
-                  <div className="mt-2 text-[11px] opacity-60">{message.created_at}</div>
+          <div className="space-y-5 md:space-y-7">
+            {messages.map((message) => {
+              const isMine = currentUser?.id === message.user_id;
+              return (
+                <div className={`flex ${isMine ? "justify-end" : "justify-start"}`} key={message.id}>
+                  <div
+                    className={`max-w-[78%] rounded-[22px] px-5 py-4 shadow-[0_14px_30px_rgba(0,0,0,0.18)] md:max-w-[44%] ${
+                      isMine
+                        ? "rounded-br-md bg-white text-zinc-950"
+                        : "rounded-bl-md bg-[#1c1c1f] text-white"
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap break-words text-[15px] leading-7">{message.text}</div>
+                    <div className={`mt-2 text-xs ${isMine ? "text-zinc-500" : "text-zinc-400"}`}>
+                      {formatMessageTime(message.created_at)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-zinc-800 p-4 md:p-5">
+      <div className="sticky bottom-0 border-t border-white/6 bg-[#09090a]/95 px-5 py-4 backdrop-blur md:px-10 md:py-5">
         {status ? (
-          <div className="mb-3 rounded-2xl border border-rose-900 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+          <div className="mb-3 rounded-[18px] border border-rose-900 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
             {status}
           </div>
         ) : null}
         <form className="flex items-end gap-3" onSubmit={handleSubmit}>
           <textarea
-            className="min-h-[56px] flex-1 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-[56px] flex-1 rounded-[18px] border border-white/6 bg-[#171718] px-5 py-4 text-[15px] text-white outline-none transition placeholder:text-zinc-500 focus:border-white/15 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isComposerDisabled}
             onChange={(event) => setText(event.target.value)}
-            placeholder={chat ? "Введите сообщение" : "Выберите чат, чтобы начать переписку"}
+            placeholder={chat ? "Написать сообщение..." : "Выберите чат, чтобы начать переписку"}
             value={text}
           />
           <button
-            className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-[18px] bg-white px-5 py-4 text-base font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[164px]"
             disabled={isComposerDisabled}
             type="submit"
           >
-            {isSending ? "Отправляем..." : "Отправить"}
+            <span className="hidden md:inline">Отправить</span>
+            <span className="text-xl md:hidden">➤</span>
           </button>
         </form>
       </div>
     </section>
   );
 }
-
