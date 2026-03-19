@@ -2,5 +2,11 @@
 .idea/
 __pycache__/
 *.pyc
+figma_ui_refernce/
 mychat.db
 .env
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
