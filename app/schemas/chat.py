@@ -9,8 +9,14 @@ class DirectChatCreate(BaseModel):
     user_id: int
 
 
+class GroupChatCreate(BaseModel):
+    title: str
+    user_ids: list[int]
+
+
 class ChatRead(BaseModel):
     id: int
     type: str
+    title: str | None = None
     created_at: datetime
     members: list[UserRead]

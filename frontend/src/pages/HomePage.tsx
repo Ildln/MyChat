@@ -35,6 +35,7 @@ export function HomePage() {
     activeChatId,
     isReady,
     openOrCreateChat,
+    createConversation,
     markChatAsRead,
   } = useChats();
   const [friends, setFriends] = useState<User[]>([]);
@@ -153,12 +154,16 @@ export function HomePage() {
     }
   }
 
-  async function handleCreateChatFromModal(friendId: number) {
+  async function handleCreateChatFromModal(payload: { title: string; userIds: number[] }) {
     setIsCreatingChat(true);
 
     try {
-      await handleOpenOrCreateChat(friendId);
+      const chat = await createConversation(payload);
+      setPageStatus(chat.type === "group" ? `Беседа «${getChatTitle(chat, user?.id)}» создана.` : "Direct chat готов.");
       setIsCreateChatOpen(false);
+      navigate(`/chat/${chat.id}`);
+    } catch (error) {
+      setPageStatus(error instanceof Error ? error.message : "Не удалось создать беседу.");
     } finally {
       setIsCreatingChat(false);
     }
@@ -237,6 +242,8 @@ export function HomePage() {
     const unreadCount = unreadByChat[chat.id] || 0;
     const isActive = activeChatId === chat.id;
     const companion = chat.members.find((member) => member.id !== user?.id) || chat.members[0] || null;
+    const avatarName = chat.type === "group" ? title : companion?.username || title;
+    const avatarUrl = chat.type === "group" ? null : companion?.avatar_url;
 
     return (
       <button
@@ -247,7 +254,7 @@ export function HomePage() {
         onClick={() => handleOpenChat(chat.id)}
         type="button"
       >
-        <UserAvatar avatarUrl={companion?.avatar_url} name={title} seed={chat.id} />
+        <UserAvatar avatarUrl={avatarUrl} name={avatarName} seed={chat.id} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="truncate text-[15px] font-semibold text-white">{title}</div>

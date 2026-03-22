@@ -9,7 +9,7 @@
   type ReactNode,
 } from "react";
 
-import { createDirectChat, getChatMessages, getChats } from "../api/chats";
+import { createDirectChat, createGroupChat, getChatMessages, getChats } from "../api/chats";
 import { useAuthContext } from "./AuthProvider";
 import { formatMessageDay } from "../lib/format";
 import { buildChatWebSocketUrl } from "../lib/ws";
@@ -30,6 +30,7 @@ type ChatsContextValue = {
   isReady: boolean;
   refreshChats: () => Promise<void>;
   openOrCreateChat: (friendId: number) => Promise<Chat>;
+  createConversation: (payload: { title?: string; userIds: number[] }) => Promise<Chat>;
   markChatAsRead: (chatId: number) => void;
   setActiveChatId: (chatId: number | null) => void;
 };
@@ -131,6 +132,24 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     [markChatAsRead, refreshChats],
   );
 
+  const createConversation = useCallback(
+    async ({ title, userIds }: { title?: string; userIds: number[] }) => {
+      const uniqueUserIds = [...new Set(userIds)];
+      let chat: Chat;
+
+      if (uniqueUserIds.length === 1) {
+        chat = await createDirectChat(uniqueUserIds[0]);
+      } else {
+        chat = await createGroupChat(title?.trim() || "Новая беседа", uniqueUserIds);
+      }
+
+      await refreshChats();
+      markChatAsRead(chat.id);
+      return chat;
+    },
+    [markChatAsRead, refreshChats],
+  );
+
   useEffect(() => {
     if (!isReady) {
       return;
@@ -219,6 +238,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       isReady: isChatsReady,
       refreshChats,
       openOrCreateChat,
+      createConversation,
       markChatAsRead,
       setActiveChatId,
     }),
@@ -230,6 +250,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       isChatsReady,
       refreshChats,
       openOrCreateChat,
+      createConversation,
       markChatAsRead,
       setActiveChatId,
     ],

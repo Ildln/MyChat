@@ -1,7 +1,7 @@
 ﻿import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { formatMessageTime, getPresenceLabel } from "../lib/format";
-import { getChatTitle } from "../lib/chat";
+import { getChatSubtitle, getChatTitle } from "../lib/chat";
 import { UserAvatar } from "./UserAvatar";
 import type { Chat } from "../types/chat";
 import type { ChatMessage } from "../types/message";
@@ -36,6 +36,10 @@ export function ChatConversationPanel({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const companion = chat?.members.find((member) => member.id !== currentUser?.id) || chat?.members[0] || null;
+  const chatTitle = chat ? getChatTitle(chat, currentUser?.id) : emptyTitle;
+  const avatarName = chat?.type === "group" ? chatTitle : companion?.username || chatTitle;
+  const avatarUrl = chat?.type === "group" ? null : companion?.avatar_url;
+  const subtitle = chat?.type === "group" ? getChatSubtitle(chat) : getPresenceLabel(companion);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -87,14 +91,19 @@ export function ChatConversationPanel({
               ←
             </button>
           ) : null}
-          {companion ? <UserAvatar avatarUrl={companion.avatar_url} name={companion.username} seed={companion.id} size="md" /> : null}
+          <UserAvatar avatarUrl={avatarUrl} name={avatarName} seed={chat.id} size="md" />
           <div className="min-w-0">
             <div className="truncate text-[24px] font-semibold text-white md:text-[28px]">
-              {chat ? getChatTitle(chat, currentUser?.id) : emptyTitle}
+              {chatTitle}
             </div>
-            <div className="mt-1 text-sm text-zinc-400">{getPresenceLabel(companion)}</div>
+            <div className="mt-1 text-sm text-zinc-400">{subtitle}</div>
           </div>
         </div>
+        {chat.type === "group" ? (
+          <div className="mt-4 truncate text-sm text-zinc-500">
+            Участники: {chat.members.map((member) => member.username).join(", ")}
+          </div>
+        ) : null}
       </header>
 
       <div className="px-5 pt-4 text-sm text-zinc-500 md:px-10">{connectionStatus}</div>

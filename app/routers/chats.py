@@ -8,7 +8,7 @@ from app.models.chat_member import ChatMember
 from app.models.friendship import Friendship
 from app.models.user import User
 from app.routers.auth import get_current_user
-from app.schemas.chat import ChatRead, DirectChatCreate
+from app.schemas.chat import ChatRead, DirectChatCreate, GroupChatCreate
 from app.schemas.message import ChatMessageCreate, ChatMessageRead
 from app.services.messages import get_chat_history, save_chat_message
 from app.services.users import build_user_read
@@ -30,9 +30,31 @@ def build_chat_read(session: Session, chat: Chat) -> ChatRead:
     return ChatRead(
         id=chat.id,
         type=chat.type,
+        title=chat.title,
         created_at=chat.created_at,
         members=[build_user_read(member) for member in members],
     )
+
+
+def ensure_user_exists(session: Session, user_id: int) -> User:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"user {user_id} not found")
+    return user
+
+
+def ensure_friendship_with_current_user(session: Session, current_user_id: int, target_user_id: int) -> None:
+    user_a_id, user_b_id = normalize_user_pair(current_user_id, target_user_id)
+    friendship = session.exec(
+        select(Friendship).where(
+            and_(
+                Friendship.user_a_id == user_a_id,
+                Friendship.user_b_id == user_b_id,
+            )
+        )
+    ).first()
+    if not friendship:
+        raise HTTPException(status_code=400, detail=f"user {target_user_id} is not your friend")
 
 
 def get_chat_for_user(session: Session, chat_id: int, current_user_id: int) -> Chat:
@@ -117,6 +139,44 @@ def create_direct_chat(
 
     session.add(ChatMember(chat_id=chat.id, user_id=current_user.id))
     session.add(ChatMember(chat_id=chat.id, user_id=target_user.id))
+    session.commit()
+    session.refresh(chat)
+
+    return build_chat_read(session, chat)
+
+
+@router.post("/group", response_model=ChatRead)
+def create_group_chat(
+    payload: GroupChatCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="group title must not be empty")
+
+    participant_ids = sorted(set(payload.user_ids))
+    participant_ids = [user_id for user_id in participant_ids if user_id != current_user.id]
+
+    if len(participant_ids) < 2:
+        raise HTTPException(status_code=400, detail="group chat requires at least 2 other participants")
+
+    for user_id in participant_ids:
+        ensure_user_exists(session, user_id)
+        ensure_friendship_with_current_user(session, current_user.id, user_id)
+
+    chat = Chat(
+        type="group",
+        title=title,
+    )
+    session.add(chat)
+    session.commit()
+    session.refresh(chat)
+
+    all_member_ids = [current_user.id, *participant_ids]
+    for user_id in all_member_ids:
+        session.add(ChatMember(chat_id=chat.id, user_id=user_id))
+
     session.commit()
     session.refresh(chat)
 

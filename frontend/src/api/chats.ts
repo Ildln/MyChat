@@ -13,6 +13,13 @@ export function createDirectChat(userId: number) {
   });
 }
 
+export function createGroupChat(title: string, userIds: number[]) {
+  return apiRequest<Chat>("/chats/group", {
+    method: "POST",
+    body: JSON.stringify({ title, user_ids: userIds }),
+  });
+}
+
 export function getChatMessages(chatId: number) {
   return apiRequest<ChatMessage[]>(`/chats/${chatId}/messages`);
 }

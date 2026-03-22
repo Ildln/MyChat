@@ -11,11 +11,11 @@ from app.models.chat_member import ChatMember
 from app.models.message import Message
 from app.models.user import User
 from app.routers.auth import get_current_user, register
-from app.routers.chats import create_direct_chat, get_chat_messages, get_chats, send_chat_message
+from app.routers.chats import create_direct_chat, create_group_chat, get_chat_messages, get_chats, send_chat_message
 from app.routers.friends import accept_friend_request, create_friend_request
 from app.routers.ws import handle_chat_ws_message, verify_chat_ws_access
 from app.schemas.auth import RegisterRequest
-from app.schemas.chat import DirectChatCreate
+from app.schemas.chat import DirectChatCreate, GroupChatCreate
 from app.schemas.friend_request import FriendRequestCreate
 from app.schemas.message import ChatMessageCreate
 from app.services.messages import build_chat_room
@@ -181,6 +181,59 @@ class DirectChatsTests(unittest.TestCase):
 
         self.assertEqual(exc_info.exception.status_code, 401)
         self.assertEqual(exc_info.exception.detail, "not authenticated")
+
+    def test_create_group_chat_success(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+        self.make_friends(alice.user_id, charlie.user_id)
+
+        with Session(self.engine) as session:
+            response = create_group_chat(
+                GroupChatCreate(title="Команда выходного дня", user_ids=[bob.user_id, charlie.user_id]),
+                session.get(User, alice.user_id),
+                session,
+            )
+
+        self.assertGreater(response.id, 0)
+        self.assertEqual(response.type, "group")
+        self.assertEqual(response.title, "Команда выходного дня")
+        self.assertEqual(len(response.members), 3)
+
+    def test_create_group_chat_rejects_without_title(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        charlie = self.create_user("charlie")
+        self.make_friends(alice.user_id, bob.user_id)
+        self.make_friends(alice.user_id, charlie.user_id)
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                create_group_chat(
+                    GroupChatCreate(title="   ", user_ids=[bob.user_id, charlie.user_id]),
+                    session.get(User, alice.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "group title must not be empty")
+
+    def test_create_group_chat_requires_at_least_two_other_participants(self):
+        alice = self.create_user("alice")
+        bob = self.create_user("bob")
+        self.make_friends(alice.user_id, bob.user_id)
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                create_group_chat(
+                    GroupChatCreate(title="Мало участников", user_ids=[bob.user_id]),
+                    session.get(User, alice.user_id),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "group chat requires at least 2 other participants")
 
     def test_get_chats_returns_empty_list_without_chats(self):
         alice = self.create_user("alice")
