@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { createDirectChat, getChatMessages, getChats } from "../api/chats";
@@ -10,17 +10,18 @@ import {
   getIncomingFriendRequests,
 } from "../api/friends";
 import { getUsers } from "../api/users";
+import { buildChatWebSocketUrl } from "../lib/ws";
 import { BrandLogo } from "../components/BrandLogo";
 import { FriendProfileModal } from "../components/FriendProfileModal";
 import { MobileBottomNav } from "../components/MobileBottomNav";
 import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../hooks/useAuth";
-import { formatMessageDay, formatMessageTime } from "../lib/format";
+import { formatMessageDay } from "../lib/format";
 import { getChatTitle } from "../lib/chat";
 import { getUserAbout } from "../lib/profile";
 import type { Chat } from "../types/chat";
 import type { FriendRequest } from "../types/friends";
-import type { ChatMessage } from "../types/message";
+import type { ChatMessage, ChatMessageEvent } from "../types/message";
 import type { User } from "../types/user";
 
 type MobileTab = "requests" | "chats" | "profile";
@@ -28,7 +29,16 @@ type MobileTab = "requests" | "chats" | "profile";
 type ChatSummary = {
   preview: string;
   time: string;
+  sortValue: number;
 };
+
+function sortChatsBySummary(chats: Chat[], summaries: Record<number, ChatSummary>) {
+  return [...chats].sort((left, right) => {
+    const rightValue = summaries[right.id]?.sortValue || 0;
+    const leftValue = summaries[left.id]?.sortValue || 0;
+    return rightValue - leftValue;
+  });
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -38,19 +48,79 @@ export function HomePage() {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatSummaries, setChatSummaries] = useState<Record<number, ChatSummary>>({});
+  const [unreadByChat, setUnreadByChat] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [pageStatus, setPageStatus] = useState("");
   const [friendRequestTarget, setFriendRequestTarget] = useState("");
   const [activeTab, setActiveTab] = useState<MobileTab>("chats");
   const [selectedFriend, setSelectedFriend] = useState<User | null>(null);
+  const socketsRef = useRef<Map<number, WebSocket>>(new Map());
 
-  const usersMap = useMemo(() => {
-    return new Map(users.map((item) => [item.id, item]));
-  }, [users]);
+  const usersMap = useMemo(() => new Map(users.map((item) => [item.id, item])), [users]);
+  const visibleIncomingRequests = useMemo(
+    () => incomingRequests.filter((request) => request.status === "pending"),
+    [incomingRequests],
+  );
+  const chatIdsKey = useMemo(
+    () => [...chats].map((chat) => chat.id).sort((left, right) => left - right).join(","),
+    [chats],
+  );
 
   useEffect(() => {
     void loadDashboard();
   }, []);
+
+  useEffect(() => {
+    socketsRef.current.forEach((socket) => socket.close());
+    socketsRef.current = new Map();
+
+    chats.forEach((chat) => {
+      const socket = new WebSocket(buildChatWebSocketUrl(chat.id));
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const payload = JSON.parse(event.data) as ChatMessageEvent | { type: string };
+          if (payload.type !== "message") {
+            return;
+          }
+
+          const message = payload as ChatMessage;
+          setChatSummaries((current) => ({
+            ...current,
+            [chat.id]: {
+              preview: message.text,
+              time: formatMessageDay(message.created_at),
+              sortValue: Date.parse(message.created_at) || Date.now(),
+            },
+          }));
+          setChats((current) => {
+            const currentChat = current.find((item) => item.id === chat.id);
+            if (!currentChat) {
+              return current;
+            }
+            const others = current.filter((item) => item.id !== chat.id);
+            return [currentChat, ...others];
+          });
+
+          if (message.user_id !== user?.id) {
+            setUnreadByChat((current) => ({
+              ...current,
+              [chat.id]: (current[chat.id] || 0) + 1,
+            }));
+          }
+        } catch {
+          setPageStatus("Не удалось обработать realtime-сообщение.");
+        }
+      });
+
+      socketsRef.current.set(chat.id, socket);
+    });
+
+    return () => {
+      socketsRef.current.forEach((socket) => socket.close());
+      socketsRef.current = new Map();
+    };
+  }, [chatIdsKey, user?.id]);
 
   async function loadDashboard() {
     setIsLoading(true);
@@ -64,11 +134,11 @@ export function HomePage() {
 
       setIncomingRequests(incoming);
       setFriends(friendsList);
-      setChats(chatsList);
       setUsers(usersList);
 
       const summaries = await loadChatSummaries(chatsList);
       setChatSummaries(summaries);
+      setChats(sortChatsBySummary(chatsList, summaries));
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось загрузить данные.");
     } finally {
@@ -82,11 +152,13 @@ export function HomePage() {
         try {
           const messages = await getChatMessages(chat.id);
           const lastMessage = messages[messages.length - 1];
+          const sortValue = lastMessage ? Date.parse(lastMessage.created_at) || 0 : Date.parse(chat.created_at) || 0;
           return [
             chat.id,
             {
               preview: lastMessage?.text || "Откройте чат, чтобы начать переписку",
               time: lastMessage ? formatMessageDay(lastMessage.created_at) : "",
+              sortValue,
             },
           ] as const;
         } catch {
@@ -95,6 +167,7 @@ export function HomePage() {
             {
               preview: "Сообщения пока недоступны",
               time: "",
+              sortValue: Date.parse(chat.created_at) || 0,
             },
           ] as const;
         }
@@ -105,22 +178,27 @@ export function HomePage() {
   }
 
   async function handleAccept(requestId: number) {
+    setIncomingRequests((current) => current.filter((request) => request.id !== requestId));
+
     try {
       await acceptFriendRequest(requestId);
       setPageStatus("Заявка принята.");
-      await loadDashboard();
+      setFriends(await getFriends());
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось принять заявку.");
+      await loadDashboard();
     }
   }
 
   async function handleDecline(requestId: number) {
+    setIncomingRequests((current) => current.filter((request) => request.id !== requestId));
+
     try {
       await declineFriendRequest(requestId);
       setPageStatus("Заявка отклонена.");
-      await loadDashboard();
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось отклонить заявку.");
+      await loadDashboard();
     }
   }
 
@@ -130,7 +208,7 @@ export function HomePage() {
       await createFriendRequest(Number(friendRequestTarget));
       setFriendRequestTarget("");
       setPageStatus("Заявка в друзья отправлена.");
-      await loadDashboard();
+      setIncomingRequests(await getIncomingFriendRequests());
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось отправить заявку.");
     }
@@ -139,11 +217,47 @@ export function HomePage() {
   async function handleOpenOrCreateChat(friendId: number) {
     try {
       const chat = await createDirectChat(friendId);
+      setUnreadByChat((current) => ({ ...current, [chat.id]: 0 }));
       setPageStatus(`Чат с пользователем #${friendId} готов.`);
       navigate(`/chat/${chat.id}`);
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось открыть чат.");
     }
+  }
+
+  function handleOpenChat(chatId: number) {
+    setUnreadByChat((current) => ({ ...current, [chatId]: 0 }));
+    navigate(`/chat/${chatId}`);
+  }
+
+  async function handleQuickCreateChat() {
+    const targetId = window.prompt("Введите ID друга, чтобы открыть новую беседу");
+    if (!targetId) {
+      return;
+    }
+
+    await handleOpenOrCreateChat(Number(targetId));
+  }
+
+  function renderRequestComposer() {
+    return (
+      <form className="rounded-[24px] border border-white/6 bg-[#171718] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]" onSubmit={handleSendFriendRequest}>
+        <div className="text-[15px] font-semibold text-white">Отправить заявку</div>
+        <div className="mt-2 text-sm text-zinc-400">Введите ID пользователя и отправьте новую заявку в друзья.</div>
+        <div className="mt-4 flex items-center gap-2">
+          <input
+            className="w-full rounded-[16px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+            onChange={(event) => setFriendRequestTarget(event.target.value)}
+            placeholder="ID пользователя"
+            type="number"
+            value={friendRequestTarget}
+          />
+          <button className="rounded-[16px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200" type="submit">
+            Отправить
+          </button>
+        </div>
+      </form>
+    );
   }
 
   function renderRequestCard(request: FriendRequest) {
@@ -182,12 +296,13 @@ export function HomePage() {
   function renderChatCard(chat: Chat) {
     const summary = chatSummaries[chat.id];
     const title = getChatTitle(chat, user?.id);
+    const unreadCount = unreadByChat[chat.id] || 0;
 
     return (
       <button
         className="group flex w-full items-start gap-3 rounded-[20px] px-4 py-3 text-left transition hover:bg-white/5"
         key={chat.id}
-        onClick={() => navigate(`/chat/${chat.id}`)}
+        onClick={() => handleOpenChat(chat.id)}
         type="button"
       >
         <UserAvatar name={title} seed={chat.id} />
@@ -196,7 +311,14 @@ export function HomePage() {
             <div className="truncate text-[15px] font-semibold text-white">{title}</div>
             <div className="shrink-0 text-xs text-zinc-500">{summary?.time || ""}</div>
           </div>
-          <div className="mt-1 truncate text-sm text-zinc-400">{summary?.preview || "Откройте чат"}</div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <div className="truncate text-sm text-zinc-400">{summary?.preview || "Откройте чат"}</div>
+            {unreadCount > 0 ? (
+              <div className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-zinc-950">
+                {unreadCount}
+              </div>
+            ) : null}
+          </div>
         </div>
       </button>
     );
@@ -217,10 +339,23 @@ export function HomePage() {
   }
 
   function renderDesktopSidebar() {
+    const isChatsTab = activeTab === "chats";
+
     return (
-      <aside className="hidden min-h-screen border-r border-white/6 lg:flex lg:w-[320px] lg:flex-col bg-[#09090a]">
+      <aside className="hidden min-h-screen border-r border-white/6 bg-[#09090a] lg:flex lg:w-[320px] lg:flex-col">
         <div className="border-b border-white/6 px-8 py-8">
-          <BrandLogo className="text-[28px]" />
+          <div className="flex items-center justify-between gap-4">
+            <BrandLogo className="text-[28px]" />
+            {isChatsTab ? (
+              <button
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl text-white transition hover:bg-white/10"
+                onClick={() => void handleQuickCreateChat()}
+                type="button"
+              >
+                +
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="px-4 pt-4">
           <div className="grid grid-cols-2 gap-2 rounded-[22px] bg-transparent p-0">
@@ -248,13 +383,16 @@ export function HomePage() {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
             {activeTab === "requests" ? (
-              incomingRequests.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
-                  Входящих заявок пока нет.
-                </div>
-              ) : (
-                incomingRequests.map(renderRequestCard)
-              )
+              <>
+                {renderRequestComposer()}
+                {visibleIncomingRequests.length === 0 ? (
+                  <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
+                    Входящих заявок пока нет.
+                  </div>
+                ) : (
+                  visibleIncomingRequests.map(renderRequestCard)
+                )}
+              </>
             ) : chats.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
                 Список чатов пока пуст.
@@ -270,7 +408,7 @@ export function HomePage() {
 
   function renderDesktopCenter() {
     return (
-      <section className="hidden min-h-screen border-r border-white/6 lg:flex lg:flex-1 lg:flex-col bg-[#09090a]">
+      <section className="hidden min-h-screen border-r border-white/6 bg-[#09090a] lg:flex lg:flex-1 lg:flex-col">
         <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
           <div className="mb-8 flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-white/[0.02] text-5xl text-white/10">
             ◔
@@ -299,32 +437,31 @@ export function HomePage() {
             <h3 className="text-[28px] font-semibold text-white">Друзья</h3>
             <span className="text-lg font-medium text-zinc-400">{friends.length}</span>
           </div>
-          <div className="space-y-3 overflow-y-auto pr-1">
-            {friends.map(renderFriendCard)}
-          </div>
+          <div className="space-y-3 overflow-y-auto pr-1">{friends.map(renderFriendCard)}</div>
         </div>
-
-        <form className="mt-6 space-y-3" onSubmit={handleSendFriendRequest}>
-          <input
-            className="w-full rounded-[18px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
-            onChange={(event) => setFriendRequestTarget(event.target.value)}
-            placeholder="Отправить заявку по ID"
-            type="number"
-            value={friendRequestTarget}
-          />
-          <button className="w-full rounded-[18px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200" type="submit">
-            Отправить заявку
-          </button>
-        </form>
       </aside>
     );
   }
 
   function renderMobileHeader() {
+    const isChatsTab = activeTab === "chats";
+
     return (
       <div className="border-b border-white/6 px-6 py-7 lg:hidden">
-        <div className="flex justify-center">
+        <div className="flex items-center justify-between gap-4">
+          <div className="w-10" />
           <BrandLogo className="text-[22px]" />
+          <div className="w-10 text-right">
+            {isChatsTab ? (
+              <button
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl text-white transition hover:bg-white/10"
+                onClick={() => void handleQuickCreateChat()}
+                type="button"
+              >
+                +
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     );
@@ -333,12 +470,13 @@ export function HomePage() {
   function renderMobileRequests() {
     return (
       <div className="space-y-4 px-4 py-5">
-        {incomingRequests.length === 0 ? (
+        {renderRequestComposer()}
+        {visibleIncomingRequests.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
             Входящих заявок пока нет.
           </div>
         ) : (
-          incomingRequests.map(renderRequestCard)
+          visibleIncomingRequests.map(renderRequestCard)
         )}
       </div>
     );
@@ -369,23 +507,8 @@ export function HomePage() {
 
         <div className="mt-8">
           <div className="mb-4 text-[28px] font-semibold text-white">Друзья ({friends.length})</div>
-          <div className="space-y-3">
-            {friends.map(renderFriendCard)}
-          </div>
+          <div className="space-y-3">{friends.map(renderFriendCard)}</div>
         </div>
-
-        <form className="mt-6 space-y-3" onSubmit={handleSendFriendRequest}>
-          <input
-            className="w-full rounded-[18px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
-            onChange={(event) => setFriendRequestTarget(event.target.value)}
-            placeholder="Отправить заявку по ID"
-            type="number"
-            value={friendRequestTarget}
-          />
-          <button className="w-full rounded-[18px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200" type="submit">
-            Отправить заявку
-          </button>
-        </form>
       </div>
     );
   }

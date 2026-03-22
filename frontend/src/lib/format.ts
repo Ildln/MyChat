@@ -1,3 +1,10 @@
+function getDeviceLocale() {
+  if (typeof navigator !== "undefined" && navigator.language) {
+    return navigator.language;
+  }
+  return "ru-RU";
+}
+
 export function formatMessageTime(value?: string): string {
   if (!value) {
     return "";
@@ -8,7 +15,7 @@ export function formatMessageTime(value?: string): string {
     return value;
   }
 
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(getDeviceLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
@@ -34,7 +41,7 @@ export function formatMessageDay(value?: string): string {
     return formatMessageTime(value);
   }
 
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(getDeviceLocale(), {
     day: "2-digit",
     month: "2-digit",
   }).format(date);
