@@ -1,7 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { createDirectChat, getChatMessages, getChats } from "../api/chats";
 import {
   acceptFriendRequest,
   createFriendRequest,
@@ -10,171 +9,70 @@ import {
   getIncomingFriendRequests,
 } from "../api/friends";
 import { getUsers } from "../api/users";
-import { buildChatWebSocketUrl } from "../lib/ws";
 import { BrandLogo } from "../components/BrandLogo";
+import { CreateChatModal } from "../components/CreateChatModal";
 import { FriendProfileModal } from "../components/FriendProfileModal";
 import { MobileBottomNav } from "../components/MobileBottomNav";
 import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../hooks/useAuth";
-import { formatMessageDay } from "../lib/format";
+import { useChats } from "../hooks/useChats";
 import { getChatTitle } from "../lib/chat";
 import { getUserAbout } from "../lib/profile";
-import type { Chat } from "../types/chat";
 import type { FriendRequest } from "../types/friends";
-import type { ChatMessage, ChatMessageEvent } from "../types/message";
 import type { User } from "../types/user";
 
 type MobileTab = "requests" | "chats" | "profile";
 
-type ChatSummary = {
-  preview: string;
-  time: string;
-  sortValue: number;
-};
-
-function sortChatsBySummary(chats: Chat[], summaries: Record<number, ChatSummary>) {
-  return [...chats].sort((left, right) => {
-    const rightValue = summaries[right.id]?.sortValue || 0;
-    const leftValue = summaries[left.id]?.sortValue || 0;
-    return rightValue - leftValue;
-  });
-}
-
 export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const {
+    chats,
+    chatSummaries,
+    unreadByChat,
+    activeChatId,
+    isReady,
+    openOrCreateChat,
+    markChatAsRead,
+  } = useChats();
   const [friends, setFriends] = useState<User[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [chatSummaries, setChatSummaries] = useState<Record<number, ChatSummary>>({});
-  const [unreadByChat, setUnreadByChat] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [pageStatus, setPageStatus] = useState("");
   const [friendRequestTarget, setFriendRequestTarget] = useState("");
   const [activeTab, setActiveTab] = useState<MobileTab>("chats");
   const [selectedFriend, setSelectedFriend] = useState<User | null>(null);
-  const socketsRef = useRef<Map<number, WebSocket>>(new Map());
+  const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const usersMap = useMemo(() => new Map(users.map((item) => [item.id, item])), [users]);
   const visibleIncomingRequests = useMemo(
     () => incomingRequests.filter((request) => request.status === "pending"),
     [incomingRequests],
   );
-  const chatIdsKey = useMemo(
-    () => [...chats].map((chat) => chat.id).sort((left, right) => left - right).join(","),
-    [chats],
-  );
 
   useEffect(() => {
     void loadDashboard();
   }, []);
 
-  useEffect(() => {
-    socketsRef.current.forEach((socket) => socket.close());
-    socketsRef.current = new Map();
-
-    chats.forEach((chat) => {
-      const socket = new WebSocket(buildChatWebSocketUrl(chat.id));
-
-      socket.addEventListener("message", (event) => {
-        try {
-          const payload = JSON.parse(event.data) as ChatMessageEvent | { type: string };
-          if (payload.type !== "message") {
-            return;
-          }
-
-          const message = payload as ChatMessage;
-          setChatSummaries((current) => ({
-            ...current,
-            [chat.id]: {
-              preview: message.text,
-              time: formatMessageDay(message.created_at),
-              sortValue: Date.parse(message.created_at) || Date.now(),
-            },
-          }));
-          setChats((current) => {
-            const currentChat = current.find((item) => item.id === chat.id);
-            if (!currentChat) {
-              return current;
-            }
-            const others = current.filter((item) => item.id !== chat.id);
-            return [currentChat, ...others];
-          });
-
-          if (message.user_id !== user?.id) {
-            setUnreadByChat((current) => ({
-              ...current,
-              [chat.id]: (current[chat.id] || 0) + 1,
-            }));
-          }
-        } catch {
-          setPageStatus("Не удалось обработать realtime-сообщение.");
-        }
-      });
-
-      socketsRef.current.set(chat.id, socket);
-    });
-
-    return () => {
-      socketsRef.current.forEach((socket) => socket.close());
-      socketsRef.current = new Map();
-    };
-  }, [chatIdsKey, user?.id]);
-
   async function loadDashboard() {
     setIsLoading(true);
     try {
-      const [incoming, friendsList, chatsList, usersList] = await Promise.all([
+      const [incoming, friendsList, usersList] = await Promise.all([
         getIncomingFriendRequests(),
         getFriends(),
-        getChats(),
         getUsers(),
       ]);
 
       setIncomingRequests(incoming);
       setFriends(friendsList);
       setUsers(usersList);
-
-      const summaries = await loadChatSummaries(chatsList);
-      setChatSummaries(summaries);
-      setChats(sortChatsBySummary(chatsList, summaries));
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось загрузить данные.");
     } finally {
       setIsLoading(false);
     }
-  }
-
-  async function loadChatSummaries(chatsList: Chat[]) {
-    const entries = await Promise.all(
-      chatsList.map(async (chat) => {
-        try {
-          const messages = await getChatMessages(chat.id);
-          const lastMessage = messages[messages.length - 1];
-          const sortValue = lastMessage ? Date.parse(lastMessage.created_at) || 0 : Date.parse(chat.created_at) || 0;
-          return [
-            chat.id,
-            {
-              preview: lastMessage?.text || "Откройте чат, чтобы начать переписку",
-              time: lastMessage ? formatMessageDay(lastMessage.created_at) : "",
-              sortValue,
-            },
-          ] as const;
-        } catch {
-          return [
-            chat.id,
-            {
-              preview: "Сообщения пока недоступны",
-              time: "",
-              sortValue: Date.parse(chat.created_at) || 0,
-            },
-          ] as const;
-        }
-      }),
-    );
-
-    return Object.fromEntries(entries);
   }
 
   async function handleAccept(requestId: number) {
@@ -204,6 +102,7 @@ export function HomePage() {
 
   async function handleSendFriendRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     try {
       await createFriendRequest(Number(friendRequestTarget));
       setFriendRequestTarget("");
@@ -216,8 +115,8 @@ export function HomePage() {
 
   async function handleOpenOrCreateChat(friendId: number) {
     try {
-      const chat = await createDirectChat(friendId);
-      setUnreadByChat((current) => ({ ...current, [chat.id]: 0 }));
+      const chat = await openOrCreateChat(friendId);
+      markChatAsRead(chat.id);
       setPageStatus(`Чат с пользователем #${friendId} готов.`);
       navigate(`/chat/${chat.id}`);
     } catch (error) {
@@ -225,23 +124,28 @@ export function HomePage() {
     }
   }
 
-  function handleOpenChat(chatId: number) {
-    setUnreadByChat((current) => ({ ...current, [chatId]: 0 }));
-    navigate(`/chat/${chatId}`);
+  async function handleCreateChatFromModal(friendId: number) {
+    setIsCreatingChat(true);
+
+    try {
+      await handleOpenOrCreateChat(friendId);
+      setIsCreateChatOpen(false);
+    } finally {
+      setIsCreatingChat(false);
+    }
   }
 
-  async function handleQuickCreateChat() {
-    const targetId = window.prompt("Введите ID друга, чтобы открыть новую беседу");
-    if (!targetId) {
-      return;
-    }
-
-    await handleOpenOrCreateChat(Number(targetId));
+  function handleOpenChat(chatId: number) {
+    markChatAsRead(chatId);
+    navigate(`/chat/${chatId}`);
   }
 
   function renderRequestComposer() {
     return (
-      <form className="rounded-[24px] border border-white/6 bg-[#171718] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]" onSubmit={handleSendFriendRequest}>
+      <form
+        className="rounded-[24px] border border-white/6 bg-[#171718] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
+        onSubmit={handleSendFriendRequest}
+      >
         <div className="text-[15px] font-semibold text-white">Отправить заявку</div>
         <div className="mt-2 text-sm text-zinc-400">Введите ID пользователя и отправьте новую заявку в друзья.</div>
         <div className="mt-4 flex items-center gap-2">
@@ -252,7 +156,10 @@ export function HomePage() {
             type="number"
             value={friendRequestTarget}
           />
-          <button className="rounded-[16px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200" type="submit">
+          <button
+            className="rounded-[16px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+            type="submit"
+          >
             Отправить
           </button>
         </div>
@@ -293,14 +200,17 @@ export function HomePage() {
     );
   }
 
-  function renderChatCard(chat: Chat) {
+  function renderChatCard(chat: (typeof chats)[number]) {
     const summary = chatSummaries[chat.id];
     const title = getChatTitle(chat, user?.id);
     const unreadCount = unreadByChat[chat.id] || 0;
+    const isActive = activeChatId === chat.id;
 
     return (
       <button
-        className="group flex w-full items-start gap-3 rounded-[20px] px-4 py-3 text-left transition hover:bg-white/5"
+        className={`group flex w-full items-start gap-3 rounded-[20px] px-4 py-3 text-left transition ${
+          isActive ? "bg-white/10 ring-1 ring-white/10" : "hover:bg-white/5"
+        }`}
         key={chat.id}
         onClick={() => handleOpenChat(chat.id)}
         type="button"
@@ -349,7 +259,7 @@ export function HomePage() {
             {isChatsTab ? (
               <button
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl text-white transition hover:bg-white/10"
-                onClick={() => void handleQuickCreateChat()}
+                onClick={() => setIsCreateChatOpen(true)}
                 type="button"
               >
                 +
@@ -358,7 +268,7 @@ export function HomePage() {
           </div>
         </div>
         <div className="px-4 pt-4">
-          <div className="grid grid-cols-2 gap-2 rounded-[22px] bg-transparent p-0">
+          <div className="grid grid-cols-2 gap-2">
             <button
               className={`rounded-[14px] px-4 py-3 text-sm font-semibold transition ${
                 activeTab === "requests" ? "bg-white text-zinc-950" : "bg-white/5 text-zinc-400 hover:text-white"
@@ -393,6 +303,10 @@ export function HomePage() {
                   visibleIncomingRequests.map(renderRequestCard)
                 )}
               </>
+            ) : !isReady ? (
+              <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
+                Загружаем чаты...
+              </div>
             ) : chats.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
                 Список чатов пока пуст.
@@ -455,7 +369,7 @@ export function HomePage() {
             {isChatsTab ? (
               <button
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl text-white transition hover:bg-white/10"
-                onClick={() => void handleQuickCreateChat()}
+                onClick={() => setIsCreateChatOpen(true)}
                 type="button"
               >
                 +
@@ -485,7 +399,11 @@ export function HomePage() {
   function renderMobileChats() {
     return (
       <div className="px-3 py-4">
-        {chats.length === 0 ? (
+        {!isReady ? (
+          <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
+            Загружаем чаты...
+          </div>
+        ) : chats.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-white/10 px-5 py-10 text-sm leading-6 text-zinc-500">
             Чатов пока нет.
           </div>
@@ -549,6 +467,14 @@ export function HomePage() {
           setSelectedFriend(null);
           void handleOpenOrCreateChat(friendId);
         }}
+      />
+
+      <CreateChatModal
+        friends={friends}
+        isOpen={isCreateChatOpen}
+        isSubmitting={isCreatingChat}
+        onClose={() => setIsCreateChatOpen(false)}
+        onCreate={handleCreateChatFromModal}
       />
     </div>
   );

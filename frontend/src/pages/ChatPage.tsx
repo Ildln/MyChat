@@ -1,17 +1,16 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { getChats } from "../api/chats";
 import { ChatConversationPanel } from "../components/ChatConversationPanel";
 import { useAuth } from "../hooks/useAuth";
 import { useChatSession } from "../hooks/useChatSession";
-import type { Chat } from "../types/chat";
+import { useChats } from "../hooks/useChats";
 
 export function ChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams();
   const { user } = useAuth();
-  const [chats, setChats] = useState<Chat[]>([]);
+  const { chats, isReady, setActiveChatId, markChatAsRead } = useChats();
   const [status, setStatus] = useState("");
 
   const numericChatId = Number(chatId);
@@ -25,17 +24,32 @@ export function ChatPage() {
   );
 
   useEffect(() => {
-    async function loadChatsList() {
-      try {
-        const items = await getChats();
-        setChats(items);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Не удалось загрузить чат.");
-      }
+    if (Number.isNaN(numericChatId)) {
+      setStatus("Некорректный адрес чата.");
+      return;
     }
 
-    void loadChatsList();
-  }, []);
+    setActiveChatId(numericChatId);
+    markChatAsRead(numericChatId);
+    setStatus("");
+
+    return () => {
+      setActiveChatId(null);
+    };
+  }, [markChatAsRead, numericChatId, setActiveChatId]);
+
+  useEffect(() => {
+    if (!isReady || Number.isNaN(numericChatId)) {
+      return;
+    }
+
+    if (!selectedChat) {
+      setStatus("Не удалось загрузить чат.");
+      return;
+    }
+
+    setStatus("");
+  }, [isReady, numericChatId, selectedChat]);
 
   return (
     <div className="min-h-screen bg-[#09090a] text-zinc-50">
