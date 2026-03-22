@@ -1,0 +1,30 @@
+{
+  "name": "MyChat",
+  "short_name": "MyChat",
+  "description": "MyChat — современный мессенджер для общения с друзьями.",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#09090a",
+  "theme_color": "#09090a",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

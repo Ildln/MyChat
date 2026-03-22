@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#09090A"/>
+  <rect x="64" y="64" width="384" height="384" rx="108" fill="#131316"/>
+  <path d="M155 256C155 197.458 202.458 150 261 150H287C345.542 150 393 197.458 393 256C393 314.542 345.542 362 287 362H254L194 402V353C170.211 333.472 155 296.315 155 256Z" stroke="white" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="256" y="262" text-anchor="middle" dominant-baseline="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="700">MC</text>
+</svg>
