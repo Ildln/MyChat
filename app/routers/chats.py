@@ -10,8 +10,8 @@ from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.chat import ChatRead, DirectChatCreate
 from app.schemas.message import ChatMessageCreate, ChatMessageRead
-from app.schemas.user import UserRead
 from app.services.messages import get_chat_history, save_chat_message
+from app.services.users import build_user_read
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -31,7 +31,7 @@ def build_chat_read(session: Session, chat: Chat) -> ChatRead:
         id=chat.id,
         type=chat.type,
         created_at=chat.created_at,
-        members=[UserRead(id=member.id, username=member.username) for member in members],
+        members=[build_user_read(member) for member in members],
     )
 
 

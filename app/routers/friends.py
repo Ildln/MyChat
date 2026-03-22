@@ -9,6 +9,7 @@ from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.friend_request import FriendRequestCreate, FriendRequestRead
 from app.schemas.user import UserRead
+from app.services.users import build_user_read
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -116,7 +117,7 @@ def get_friends(
     ).all()
 
     return [
-        UserRead(id=friend.id, username=friend.username)
+        build_user_read(friend)
         for friend in friends
     ]
 

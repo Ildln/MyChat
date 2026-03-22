@@ -8,6 +8,7 @@ import {
   getFriends,
   getIncomingFriendRequests,
 } from "../api/friends";
+import { updateCurrentUser } from "../api/users";
 import { getUsers } from "../api/users";
 import { BrandLogo } from "../components/BrandLogo";
 import { CreateChatModal } from "../components/CreateChatModal";
@@ -17,6 +18,7 @@ import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../hooks/useAuth";
 import { useChats } from "../hooks/useChats";
 import { getChatTitle } from "../lib/chat";
+import { getPresenceLabel } from "../lib/format";
 import { getUserAbout } from "../lib/profile";
 import type { FriendRequest } from "../types/friends";
 import type { User } from "../types/user";
@@ -25,7 +27,7 @@ type MobileTab = "requests" | "chats" | "profile";
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const {
     chats,
     chatSummaries,
@@ -45,6 +47,10 @@ export function HomePage() {
   const [selectedFriend, setSelectedFriend] = useState<User | null>(null);
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [draftAbout, setDraftAbout] = useState("");
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState("");
 
   const usersMap = useMemo(() => new Map(users.map((item) => [item.id, item])), [users]);
   const visibleIncomingRequests = useMemo(
@@ -55,6 +61,11 @@ export function HomePage() {
   useEffect(() => {
     void loadDashboard();
   }, []);
+
+  useEffect(() => {
+    setDraftAbout(user?.about || "");
+    setDraftAvatarUrl(user?.avatar_url || "");
+  }, [user?.about, user?.avatar_url, user?.id]);
 
   async function loadDashboard() {
     setIsLoading(true);
@@ -110,6 +121,24 @@ export function HomePage() {
       setIncomingRequests(await getIncomingFriendRequests());
     } catch (error) {
       setPageStatus(error instanceof Error ? error.message : "Не удалось отправить заявку.");
+    }
+  }
+
+  async function handleSaveProfile() {
+    setIsSavingProfile(true);
+
+    try {
+      await updateCurrentUser({
+        about: draftAbout,
+        avatar_url: draftAvatarUrl,
+      });
+      await refreshUser();
+      setIsEditingProfile(false);
+      setPageStatus("Профиль обновлён.");
+    } catch (error) {
+      setPageStatus(error instanceof Error ? error.message : "Не удалось обновить профиль.");
+    } finally {
+      setIsSavingProfile(false);
     }
   }
 
@@ -174,10 +203,12 @@ export function HomePage() {
     return (
       <div className="rounded-[24px] border border-white/6 bg-[#171718] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]" key={request.id}>
         <div className="flex items-center gap-3">
-          <UserAvatar name={displayName} seed={request.from_user_id} />
+          <UserAvatar avatarUrl={sender?.avatar_url} name={displayName} seed={request.from_user_id} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-semibold text-white">{displayName}</div>
-            <div className="mt-1 text-sm leading-5 text-zinc-400">ID: {request.from_user_id} • ждёт подтверждения</div>
+            <div className="mt-1 text-sm leading-5 text-zinc-400">
+              {sender ? getPresenceLabel(sender) : `ID: ${request.from_user_id}`}
+            </div>
           </div>
         </div>
         <div className="mt-4 flex gap-2">
@@ -205,6 +236,7 @@ export function HomePage() {
     const title = getChatTitle(chat, user?.id);
     const unreadCount = unreadByChat[chat.id] || 0;
     const isActive = activeChatId === chat.id;
+    const companion = chat.members.find((member) => member.id !== user?.id) || chat.members[0] || null;
 
     return (
       <button
@@ -215,7 +247,7 @@ export function HomePage() {
         onClick={() => handleOpenChat(chat.id)}
         type="button"
       >
-        <UserAvatar name={title} seed={chat.id} />
+        <UserAvatar avatarUrl={companion?.avatar_url} name={title} seed={chat.id} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="truncate text-[15px] font-semibold text-white">{title}</div>
@@ -242,9 +274,88 @@ export function HomePage() {
         onClick={() => setSelectedFriend(friend)}
         type="button"
       >
-        <UserAvatar name={friend.username} seed={friend.id} />
-        <div className="truncate text-[15px] font-semibold text-white">{friend.username}</div>
+        <UserAvatar avatarUrl={friend.avatar_url} name={friend.username} seed={friend.id} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-semibold text-white">{friend.username}</div>
+          <div className="mt-1 truncate text-sm text-zinc-400">{getPresenceLabel(friend)}</div>
+        </div>
       </button>
+    );
+  }
+
+  function renderProfileEditor() {
+    return (
+      <div className="mt-5 space-y-4">
+        <div>
+          <div className="mb-2 text-sm font-medium text-zinc-300">Ссылка на аватарку</div>
+          <input
+            className="w-full rounded-[16px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+            onChange={(event) => setDraftAvatarUrl(event.target.value)}
+            placeholder="https://..."
+            type="url"
+            value={draftAvatarUrl}
+          />
+        </div>
+        <div>
+          <div className="mb-2 text-sm font-medium text-zinc-300">О себе</div>
+          <textarea
+            className="min-h-[110px] w-full rounded-[16px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+            onChange={(event) => setDraftAbout(event.target.value)}
+            placeholder="Расскажите о себе"
+            value={draftAbout}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 rounded-[16px] bg-white px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60"
+            disabled={isSavingProfile}
+            onClick={() => void handleSaveProfile()}
+            type="button"
+          >
+            {isSavingProfile ? "Сохраняем..." : "Сохранить"}
+          </button>
+          <button
+            className="rounded-[16px] bg-white/8 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/12"
+            onClick={() => {
+              setIsEditingProfile(false);
+              setDraftAbout(user?.about || "");
+              setDraftAvatarUrl(user?.avatar_url || "");
+            }}
+            type="button"
+          >
+            Отмена
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderProfileCard(compact = false) {
+    return (
+      <>
+        <div className="flex flex-col items-center text-center">
+          <UserAvatar avatarUrl={user?.avatar_url} name={user?.username || "ME"} seed={user?.id || 0} size="xl" />
+          <h2 className="mt-6 text-[22px] font-semibold text-white">{user?.username || "Пользователь"}</h2>
+          <div className="mt-2 text-sm text-zinc-400">{getPresenceLabel(user)}</div>
+          {!isEditingProfile ? (
+            <>
+              <div className="mt-4 text-sm font-medium text-zinc-300">О себе:</div>
+              <p className={`mt-2 text-sm leading-7 text-zinc-400 ${compact ? "max-w-none" : "max-w-[240px]"}`}>
+                {getUserAbout(user || null)}
+              </p>
+              <button
+                className="mt-5 rounded-[16px] bg-white/8 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/12"
+                onClick={() => setIsEditingProfile(true)}
+                type="button"
+              >
+                Редактировать профиль
+              </button>
+            </>
+          ) : (
+            renderProfileEditor()
+          )}
+        </div>
+      </>
     );
   }
 
@@ -339,12 +450,7 @@ export function HomePage() {
   function renderDesktopProfile() {
     return (
       <aside className="hidden min-h-screen w-[320px] bg-[#09090a] px-6 py-8 lg:flex lg:flex-col">
-        <div className="flex flex-col items-center text-center">
-          <UserAvatar name={user?.username || "ME"} seed={user?.id || 0} size="xl" />
-          <h2 className="mt-6 text-[22px] font-semibold text-white">{user?.username || "Пользователь"}</h2>
-          <div className="mt-3 text-sm font-medium text-zinc-300">О себе:</div>
-          <p className="mt-2 max-w-[240px] text-sm leading-7 text-zinc-400">{getUserAbout(user || null)}</p>
-        </div>
+        {renderProfileCard(false)}
 
         <div className="mt-10 border-t border-white/6 pt-8">
           <div className="mb-4 flex items-center justify-between">
@@ -417,11 +523,7 @@ export function HomePage() {
   function renderMobileProfile() {
     return (
       <div className="px-4 py-6">
-        <div className="flex flex-col items-center text-center">
-          <UserAvatar name={user?.username || "ME"} seed={user?.id || 0} size="xl" />
-          <h2 className="mt-5 text-[22px] font-semibold text-white">{user?.username || "Пользователь"}</h2>
-          <p className="mt-3 text-sm leading-7 text-zinc-400">О себе: {getUserAbout(user || null)}</p>
-        </div>
+        {renderProfileCard(true)}
 
         <div className="mt-8">
           <div className="mb-4 text-[28px] font-semibold text-white">Друзья ({friends.length})</div>

@@ -7,6 +7,7 @@ from app.models.user import User
 from app.core.security import create_access_token, hash_password, verify_password, verify_token
 from app.schemas.auth import AuthTokenResponse, LoginRequest, RegisterRequest
 from app.schemas.user import UserRead
+from app.services.users import build_user_read, touch_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -28,6 +29,7 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="invalid token")
 
+    user = touch_user(session, user)
     return user
 
 
@@ -58,6 +60,7 @@ def register(
     session.add(user)
     session.commit()
     session.refresh(user)
+    user = touch_user(session, user)
 
     token = create_access_token(sub=str(user.id))
 
@@ -92,6 +95,7 @@ def login(
     if not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="invalid username or password")
 
+    user = touch_user(session, user)
     token = create_access_token(sub=str(user.id))
 
     return AuthTokenResponse(
@@ -103,7 +107,4 @@ def login(
 
 @router.get("/me", response_model=UserRead)
 def me(current_user: User = Depends(get_current_user)):
-    return UserRead(
-        id=current_user.id,
-        username=current_user.username,
-    )
+    return build_user_read(current_user)

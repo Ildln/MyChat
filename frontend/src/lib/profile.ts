@@ -1,4 +1,4 @@
-import type { User } from "../types/user";
+﻿import type { User } from "../types/user";
 
 const avatarPalette = [
   "from-amber-200 to-orange-400",
@@ -24,17 +24,9 @@ export function getAvatarTone(seed: string | number): string {
 }
 
 export function getUserAbout(user: User | null): string {
-  if (!user) {
+  if (!user?.about?.trim()) {
     return "Пользователь MyChat";
   }
 
-  const variants = [
-    "Люблю путешествия и технологии",
-    "Всегда на связи в MyChat",
-    "Люблю общение и хорошие разговоры",
-    "Захожу сюда ради друзей и переписки",
-    "Открыт к новым знакомствам и чатам",
-  ];
-
-  return variants[user.id % variants.length];
+  return user.about.trim();
 }

@@ -5,6 +5,7 @@ from app.core.security import verify_token
 from app.db import engine
 from app.models.chat import Chat
 from app.models.chat_member import ChatMember
+from app.models.user import User
 from app.schemas.message import ChatMessageRead
 from app.services.messages import (
     build_chat_room,
@@ -13,6 +14,7 @@ from app.services.messages import (
     save_chat_message,
     save_message,
 )
+from app.services.users import touch_user
 from app.services.ws_manager import manager
 
 router = APIRouter(tags=["ws"])
@@ -78,10 +80,13 @@ async def ws_room(websocket: WebSocket, room: str):
         await websocket.close(code=1008)
         return
 
+    session = Session(engine)
     await manager.connect(room, websocket)
     manager.set_user(websocket, user_id)
+    user = session.get(User, user_id)
+    if user:
+        touch_user(session, user)
 
-    session = Session(engine)
     try:
         history = get_room_history(session, room=room, limit=30)
         await websocket.send_json({
@@ -103,11 +108,17 @@ async def ws_room(websocket: WebSocket, room: str):
                 continue
 
             saved = save_message(session, user_id=user_id, room=room, text=text)
+            user = session.get(User, user_id)
+            if user:
+                touch_user(session, user)
             await manager.broadcast(room, {"type": "message", **saved.model_dump(mode="json")})
 
     except WebSocketDisconnect:
         pass
     finally:
+        user = session.get(User, user_id)
+        if user:
+            touch_user(session, user)
         session.close()
         manager.disconnect(room, websocket)
         await manager.broadcast(room, {
@@ -131,6 +142,9 @@ async def ws_chat(websocket: WebSocket, chat_id: int):
 
         await manager.connect(room, websocket)
         manager.set_user(websocket, user_id)
+        user = session.get(User, user_id)
+        if user:
+            touch_user(session, user)
 
         history = get_chat_history(session, chat_id=chat_id)
         await websocket.send_json({
@@ -154,10 +168,16 @@ async def ws_chat(websocket: WebSocket, chat_id: int):
             if response is None:
                 continue
 
+            user = session.get(User, user_id)
+            if user:
+                touch_user(session, user)
             await manager.broadcast(room, response)
 
     except WebSocketDisconnect:
         pass
     finally:
+        user = session.get(User, user_id) if "user_id" in locals() else None
+        if user:
+            touch_user(session, user)
         session.close()
         manager.disconnect(room, websocket)

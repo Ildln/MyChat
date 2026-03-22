@@ -25,6 +25,12 @@ class ConnectionManager:
                 users.append(uid)
         return sorted(set(users))
 
+    def get_online_user_ids(self) -> list[int]:
+        return sorted(set(self.ws_user.values()))
+
+    def is_user_online(self, user_id: int) -> bool:
+        return user_id in self.ws_user.values()
+
     async def broadcast(self, room: str, message: dict):
         for ws in self.rooms.get(room, []):
             await ws.send_json(message)

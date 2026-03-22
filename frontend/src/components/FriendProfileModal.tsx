@@ -1,4 +1,5 @@
-import type { User } from "../types/user";
+﻿import type { User } from "../types/user";
+import { getPresenceLabel } from "../lib/format";
 import { getUserAbout } from "../lib/profile";
 import { UserAvatar } from "./UserAvatar";
 
@@ -36,8 +37,9 @@ export function FriendProfileModal({
         </div>
 
         <div className="flex flex-col items-center text-center">
-          <UserAvatar name={friend.username} seed={friend.id} size="xl" />
+          <UserAvatar avatarUrl={friend.avatar_url} name={friend.username} seed={friend.id} size="xl" />
           <h3 className="mt-5 text-[34px] font-semibold leading-none text-white">{friend.username}</h3>
+          <div className="mt-3 text-sm text-zinc-400">{getPresenceLabel(friend)}</div>
           <p className="mt-4 text-[15px] leading-7 text-zinc-400">
             <span className="text-zinc-300">О себе:</span> {getUserAbout(friend)}
           </p>

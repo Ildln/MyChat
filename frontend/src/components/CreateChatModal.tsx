@@ -92,7 +92,7 @@ export function CreateChatModal({
                   onClick={() => setSelectedFriendId(friend.id)}
                   type="button"
                 >
-                  <UserAvatar name={friend.username} seed={friend.id} />
+                  <UserAvatar avatarUrl={friend.avatar_url} name={friend.username} seed={friend.id} />
                   <div className="truncate text-[15px] font-semibold text-white">{friend.username}</div>
                 </button>
               );

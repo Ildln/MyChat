@@ -1,6 +1,6 @@
 ﻿import { type FormEvent, useEffect, useRef, useState } from "react";
 
-import { formatMessageTime } from "../lib/format";
+import { formatMessageTime, getPresenceLabel } from "../lib/format";
 import { getChatTitle } from "../lib/chat";
 import { UserAvatar } from "./UserAvatar";
 import type { Chat } from "../types/chat";
@@ -87,12 +87,12 @@ export function ChatConversationPanel({
               ←
             </button>
           ) : null}
-          {companion ? <UserAvatar name={companion.username} seed={companion.id} size="md" /> : null}
+          {companion ? <UserAvatar avatarUrl={companion.avatar_url} name={companion.username} seed={companion.id} size="md" /> : null}
           <div className="min-w-0">
             <div className="truncate text-[24px] font-semibold text-white md:text-[28px]">
               {chat ? getChatTitle(chat, currentUser?.id) : emptyTitle}
             </div>
-            <div className="mt-1 text-sm text-zinc-400">в сети</div>
+            <div className="mt-1 text-sm text-zinc-400">{getPresenceLabel(companion)}</div>
           </div>
         </div>
       </header>
