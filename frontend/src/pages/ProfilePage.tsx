@@ -2,9 +2,9 @@
 import { useNavigate } from "react-router-dom";
 
 import { updateCurrentUser } from "../api/users";
+import { PushNotificationsCard } from "../components/PushNotificationsCard";
 import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../hooks/useAuth";
-import { usePushNotifications } from "../hooks/usePushNotifications";
 import { getPresenceLabel } from "../lib/format";
 import { getUserAbout } from "../lib/profile";
 
@@ -16,8 +16,6 @@ export function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState("");
-  const push = usePushNotifications();
-
   useEffect(() => {
     setDraftAbout(user?.about || "");
     setDraftAvatarUrl(user?.avatar_url || "");
@@ -95,41 +93,8 @@ export function ProfilePage() {
           </div>
         )}
 
-        <div className="mt-6 space-y-4 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <div>
-            <div className="text-sm text-zinc-400">Push-уведомления</div>
-            <div className="mt-2 text-base text-white">
-              {push.uiState === "unsupported" ? "Не поддерживаются" : push.isSubscribed ? "Включены" : "Выключены"}
-            </div>
-            <div className="mt-2 text-sm text-zinc-400">
-              {push.uiState === "unsupported"
-                ? "Этот браузер не поддерживает web push."
-                : push.uiState === "denied"
-                  ? "Доступ к уведомлениям запрещён в настройках браузера."
-                  : push.iosNeedsStandalone
-                    ? "Для iPhone: сначала добавьте MyChat на экран домой и откройте его как приложение."
-                    : "Уведомления будут приходить о новых сообщениях, даже если чат не открыт."}
-            </div>
-            {push.status ? <div className="mt-3 text-sm text-zinc-300">{push.status}</div> : null}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60"
-              disabled={push.isBusy || push.uiState === "unsupported" || push.uiState === "denied"}
-              onClick={() => void push.enable()}
-              type="button"
-            >
-              {push.isBusy ? "Подождите..." : "Включить уведомления"}
-            </button>
-            <button
-              className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm text-white transition hover:border-zinc-500 disabled:opacity-60"
-              disabled={push.isBusy || !push.isSubscribed}
-              onClick={() => void push.disable()}
-              type="button"
-            >
-              Отключить уведомления
-            </button>
-          </div>
+        <div className="mt-6">
+          <PushNotificationsCard />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">

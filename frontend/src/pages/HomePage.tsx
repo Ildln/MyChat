@@ -14,6 +14,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import { CreateChatModal } from "../components/CreateChatModal";
 import { FriendProfileModal } from "../components/FriendProfileModal";
 import { MobileBottomNav } from "../components/MobileBottomNav";
+import { PushNotificationsCard } from "../components/PushNotificationsCard";
 import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../hooks/useAuth";
 import { useChats } from "../hooks/useChats";
@@ -357,10 +358,21 @@ export function HomePage() {
               >
                 Редактировать профиль
               </button>
+              <button
+                className="mt-3 rounded-[16px] bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                onClick={() => navigate("/profile")}
+                type="button"
+              >
+                Открыть страницу профиля
+              </button>
             </>
           ) : (
             renderProfileEditor()
           )}
+        </div>
+
+        <div className="mt-6">
+          <PushNotificationsCard compact={compact} />
         </div>
       </>
     );
