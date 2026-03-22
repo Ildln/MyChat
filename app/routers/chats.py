@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import and_
 from sqlmodel import Session, select
 
@@ -11,6 +11,7 @@ from app.routers.auth import get_current_user
 from app.schemas.chat import ChatRead, DirectChatCreate, GroupChatCreate
 from app.schemas.message import ChatMessageCreate, ChatMessageRead
 from app.services.messages import get_chat_history, save_chat_message
+from app.services.push import send_push_notifications_for_message
 from app.services.users import build_user_read
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -209,6 +210,7 @@ def get_chat_messages(
 def send_chat_message(
     chat_id: int,
     payload: ChatMessageCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -224,6 +226,7 @@ def send_chat_message(
         user_id=current_user.id,
         text=text,
     )
+    background_tasks.add_task(send_push_notifications_for_message, message.id)
 
     return ChatMessageRead(
         id=message.id,

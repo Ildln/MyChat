@@ -1,4 +1,6 @@
-﻿from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+﻿import asyncio
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select
 
 from app.core.security import verify_token
@@ -14,6 +16,7 @@ from app.services.messages import (
     save_chat_message,
     save_message,
 )
+from app.services.push import send_push_notifications_for_message
 from app.services.users import touch_user
 from app.services.ws_manager import manager
 
@@ -172,6 +175,7 @@ async def ws_chat(websocket: WebSocket, chat_id: int):
             if user:
                 touch_user(session, user)
             await manager.broadcast(room, response)
+            asyncio.create_task(asyncio.to_thread(send_push_notifications_for_message, response["id"]))
 
     except WebSocketDisconnect:
         pass
