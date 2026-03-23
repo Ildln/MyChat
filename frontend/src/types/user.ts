@@ -5,4 +5,5 @@ export interface User {
   about?: string | null;
   last_seen_at?: string | null;
   is_online?: boolean;
+  two_factor_enabled?: boolean;
 }

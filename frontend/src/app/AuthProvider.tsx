@@ -8,18 +8,34 @@ import {
   type ReactNode,
 } from "react";
 
-import { getCurrentUser, login as loginRequest, logoutSession, register as registerRequest } from "../api/auth";
+import { getCurrentUser, login as loginRequest, logoutSession, register as registerRequest, verifyTwoFactorLogin } from "../api/auth";
 import { registerAuthFailureHandler } from "../api/http";
-import { clearAuthTokens, getAccessToken, getRefreshToken, setAuthTokens } from "../lib/storage";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  getTrustedDeviceToken,
+  setAuthTokens,
+  setTrustedDeviceToken,
+} from "../lib/storage";
 import type { LoginRequest, RegisterRequest } from "../types/auth";
 import type { User } from "../types/user";
+
+type TwoFactorChallenge = {
+  userId: number;
+  username: string;
+  loginChallengeToken: string;
+};
 
 type AuthContextValue = {
   user: User | null;
   token: string;
   isAuthenticated: boolean;
   isReady: boolean;
-  login: (payload: LoginRequest) => Promise<void>;
+  twoFactorChallenge: TwoFactorChallenge | null;
+  login: (payload: LoginRequest) => Promise<boolean>;
+  verifyTwoFactor: (code: string, rememberDevice: boolean) => Promise<void>;
+  cancelTwoFactor: () => void;
   register: (payload: RegisterRequest) => Promise<void>;
   refreshUser: () => Promise<User | null>;
   logout: () => Promise<void>;
@@ -31,11 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setTokenState] = useState<string>(() => getAccessToken());
   const [isReady, setIsReady] = useState(false);
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState<TwoFactorChallenge | null>(null);
 
   const clearLocalSession = useCallback(() => {
     clearAuthTokens();
     setTokenState("");
     setUser(null);
+    setTwoFactorChallenge(null);
     setIsReady(true);
   }, []);
 
@@ -75,16 +93,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenState(accessToken);
     const currentUser = await getCurrentUser();
     setUser(currentUser);
+    setTwoFactorChallenge(null);
     setIsReady(true);
   }, []);
 
   const login = useCallback(
     async (payload: LoginRequest) => {
-      const response = await loginRequest(payload);
-      await completeAuth(response.access_token, response.refresh_token);
+      const response = await loginRequest({
+        ...payload,
+        trusted_device_token: getTrustedDeviceToken() || undefined,
+      });
+
+      if (response.requires_two_factor) {
+        setTwoFactorChallenge({
+          userId: response.user_id || 0,
+          username: response.username || payload.username.trim(),
+          loginChallengeToken: response.login_challenge_token || "",
+        });
+        setIsReady(true);
+        return false;
+      }
+
+      await completeAuth(response.access_token || "", response.refresh_token || "");
+      if (response.trusted_device_token) {
+        setTrustedDeviceToken(response.trusted_device_token);
+      }
+      return true;
     },
     [completeAuth],
   );
+
+  const verifyTwoFactor = useCallback(
+    async (code: string, rememberDevice: boolean) => {
+      if (!twoFactorChallenge) {
+        throw new Error("Нет активного шага двухфакторной проверки.");
+      }
+
+      const response = await verifyTwoFactorLogin({
+        login_challenge_token: twoFactorChallenge.loginChallengeToken,
+        code,
+        remember_device: rememberDevice,
+      });
+      await completeAuth(response.access_token, response.refresh_token);
+      if (response.trusted_device_token) {
+        setTrustedDeviceToken(response.trusted_device_token);
+      }
+    },
+    [completeAuth, twoFactorChallenge],
+  );
+
+  const cancelTwoFactor = useCallback(() => {
+    setTwoFactorChallenge(null);
+  }, []);
 
   const register = useCallback(
     async (payload: RegisterRequest) => {
@@ -140,12 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       isAuthenticated: Boolean(token && user),
       isReady,
+      twoFactorChallenge,
       login,
+      verifyTwoFactor,
+      cancelTwoFactor,
       register,
       refreshUser,
       logout,
     }),
-    [user, token, isReady, login, register, refreshUser, logout],
+    [user, token, isReady, twoFactorChallenge, login, verifyTwoFactor, cancelTwoFactor, register, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

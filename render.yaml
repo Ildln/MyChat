@@ -3,7 +3,7 @@ services:
     name: mychat
     env: python
     buildCommand: pip install -r requirements.txt
-    preDeployCommand: python -m app.migrations.add_user_profile_fields && python -m app.migrations.add_user_auth_reset_fields && python -m app.migrations.add_user_refresh_fields && python -m app.migrations.add_chat_title && python -m app.migrations.create_push_subscription_table
+    preDeployCommand: python -m app.migrations.add_user_profile_fields && python -m app.migrations.add_user_auth_reset_fields && python -m app.migrations.add_user_refresh_fields && python -m app.migrations.add_user_two_factor_fields && python -m app.migrations.add_chat_title && python -m app.migrations.create_push_subscription_table
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL

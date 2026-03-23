@@ -42,4 +42,5 @@ def build_user_read(user: User) -> UserRead:
         about=user.about,
         last_seen_at=user.last_seen_at,
         is_online=manager.is_user_online(user.id),
+        two_factor_enabled=user.two_factor_enabled,
     )

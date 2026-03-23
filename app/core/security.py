@@ -1,11 +1,13 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError
+import pyotp
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me-before-production")
 ALGORITHM = "HS256"
@@ -13,6 +15,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 PASSWORD_HASH_ITERATIONS = 100_000
 PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 30
+TWO_FACTOR_LOGIN_CHALLENGE_EXPIRE_MINUTES = 10
+TRUSTED_DEVICE_EXPIRE_DAYS = 30
+BACKUP_CODES_COUNT = 8
 
 
 def hash_password(password: str) -> str:
@@ -74,6 +79,67 @@ def hash_refresh_token(token: str) -> str:
 
 def get_refresh_token_expires_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+
+def hash_secret_value(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def generate_two_factor_secret() -> str:
+    return pyotp.random_base32()
+
+
+def build_totp_uri(username: str, secret: str) -> str:
+    issuer = os.getenv("TOTP_ISSUER", "MyChat")
+    return pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name=issuer)
+
+
+def verify_totp_code(secret: str | None, code: str) -> bool:
+    if not secret:
+        return False
+    normalized = code.strip().replace(" ", "")
+    if not normalized:
+        return False
+    try:
+        return bool(pyotp.TOTP(secret).verify(normalized, valid_window=1))
+    except Exception:
+        return False
+
+
+def generate_login_challenge_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def get_two_factor_login_challenge_expires_at() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(minutes=TWO_FACTOR_LOGIN_CHALLENGE_EXPIRE_MINUTES)
+
+
+def generate_trusted_device_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def get_trusted_device_expires_at() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(days=TRUSTED_DEVICE_EXPIRE_DAYS)
+
+
+def generate_backup_codes() -> list[str]:
+    return [secrets.token_hex(4).upper() for _ in range(BACKUP_CODES_COUNT)]
+
+
+def hash_backup_codes(codes: list[str]) -> str:
+    return json.dumps([hash_secret_value(code) for code in codes])
+
+
+def load_backup_code_hashes(raw_value: str | None) -> list[str]:
+    if not raw_value:
+        return []
+    try:
+        data = json.loads(raw_value)
+        if isinstance(data, list):
+            return [str(item) for item in data]
+    except json.JSONDecodeError:
+        return []
+    return []
 
 
 def create_access_token(*, sub: str, expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> str:

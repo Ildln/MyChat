@@ -4,15 +4,22 @@ import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
+  LoginResponse,
   LoginRequest,
   MessageResponse,
   RegisterRequest,
   ResetPasswordRequest,
+  TwoFactorDisableRequest,
+  TwoFactorEnableRequest,
+  TwoFactorEnableResponse,
+  TwoFactorLoginVerifyRequest,
+  TwoFactorSetupResponse,
+  TwoFactorVerifyResponse,
 } from "../types/auth";
 import type { User } from "../types/user";
 
 export function login(payload: LoginRequest) {
-  return apiRequest<AuthTokenResponse>("/auth/login", {
+  return apiRequest<LoginResponse>("/auth/login", {
     method: "POST",
     auth: false,
     body: JSON.stringify(payload),
@@ -63,6 +70,34 @@ export function resetPassword(payload: ResetPasswordRequest) {
 
 export function changePassword(payload: ChangePasswordRequest) {
   return apiRequest<MessageResponse>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setupTwoFactor() {
+  return apiRequest<TwoFactorSetupResponse>("/auth/2fa/setup", {
+    method: "POST",
+  });
+}
+
+export function enableTwoFactor(payload: TwoFactorEnableRequest) {
+  return apiRequest<TwoFactorEnableResponse>("/auth/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyTwoFactorLogin(payload: TwoFactorLoginVerifyRequest) {
+  return apiRequest<TwoFactorVerifyResponse>("/auth/2fa/login/verify", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function disableTwoFactor(payload: TwoFactorDisableRequest) {
+  return apiRequest<MessageResponse>("/auth/2fa/disable", {
     method: "POST",
     body: JSON.stringify(payload),
   });

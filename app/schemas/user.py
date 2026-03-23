@@ -14,6 +14,7 @@ class UserRead(BaseModel):
     about: str | None = None
     last_seen_at: datetime | None = None
     is_online: bool = False
+    two_factor_enabled: bool = False
 
 
 class UserUpdate(BaseModel):
