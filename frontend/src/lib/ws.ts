@@ -16,3 +16,8 @@ export function buildChatWebSocketUrl(chatId: number): string {
   const token = encodeURIComponent(getAccessToken());
   return `${normalizeWsBaseUrl(env.wsBaseUrl)}/ws/chats/${chatId}?token=${token}`;
 }
+
+export function buildNotificationsWebSocketUrl(): string {
+  const token = encodeURIComponent(getAccessToken());
+  return `${normalizeWsBaseUrl(env.wsBaseUrl)}/ws/notifications?token=${token}`;
+}

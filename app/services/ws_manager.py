@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import WebSocket
 
 class ConnectionManager:
@@ -34,5 +36,15 @@ class ConnectionManager:
     async def broadcast(self, room: str, message: dict):
         for ws in self.rooms.get(room, []):
             await ws.send_json(message)
+
+    def broadcast_sync(self, room: str, message: dict):
+        try:
+            asyncio.run(self.broadcast(room, message))
+        except RuntimeError:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return
+            loop.create_task(self.broadcast(room, message))
 
 manager = ConnectionManager()

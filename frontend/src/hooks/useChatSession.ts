@@ -1,8 +1,14 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getChatMessages, sendChatMessage } from "../api/chats";
+import { getChatMessages, markChatRead as markChatReadRequest, sendChatMessage } from "../api/chats";
 import { buildChatWebSocketUrl } from "../lib/ws";
-import type { ChatHistoryEvent, ChatMessage, ChatMessageEvent } from "../types/message";
+import type {
+  ChatHistoryEvent,
+  ChatMessage,
+  ChatMessageDeliveredEvent,
+  ChatMessageEvent,
+  ChatMessageReadEvent,
+} from "../types/message";
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   const byId = new Map<number, ChatMessage>();
@@ -18,6 +24,36 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   return Array.from(byId.values()).sort((left, right) => left.id - right.id);
 }
 
+function applyDelivered(messages: ChatMessage[], event: ChatMessageDeliveredEvent) {
+  return messages.map((message) => {
+    if (!event.message_ids.includes(message.id)) {
+      return message;
+    }
+
+    if (message.delivery_status === "read") {
+      return message;
+    }
+
+    return {
+      ...message,
+      delivery_status: "delivered" as const,
+    };
+  });
+}
+
+function applyRead(messages: ChatMessage[], event: ChatMessageReadEvent) {
+  return messages.map((message) => {
+    if (!event.message_ids.includes(message.id)) {
+      return message;
+    }
+
+    return {
+      ...message,
+      delivery_status: "read" as const,
+    };
+  });
+}
+
 export function useChatSession(chatId: number | null) {
   const socketRef = useRef<WebSocket | null>(null);
   const activeChatIdRef = useRef<number | null>(null);
@@ -31,6 +67,14 @@ export function useChatSession(chatId: number | null) {
     }
     socketRef.current = null;
     activeChatIdRef.current = null;
+  }, []);
+
+  const confirmRead = useCallback(async (targetChatId: number) => {
+    try {
+      await markChatReadRequest(targetChatId);
+    } catch {
+      // Ничего не делаем: unread всё равно подтянется при следующем обновлении списка чатов.
+    }
   }, []);
 
   const loadHistory = useCallback(async (targetChatId: number) => {
@@ -50,6 +94,10 @@ export function useChatSession(chatId: number | null) {
         await loadHistory(targetChatId);
         if (cancelled) {
           return;
+        }
+
+        if (typeof document === "undefined" || document.visibilityState === "visible") {
+          void confirmRead(targetChatId);
         }
 
         setConnectionStatus("Подключаем realtime-соединение...");
@@ -72,7 +120,11 @@ export function useChatSession(chatId: number | null) {
           }
 
           try {
-            const payload = JSON.parse(event.data) as ChatHistoryEvent | ChatMessageEvent;
+            const payload = JSON.parse(event.data) as
+              | ChatHistoryEvent
+              | ChatMessageEvent
+              | ChatMessageDeliveredEvent
+              | ChatMessageReadEvent;
 
             if (payload.type === "history") {
               setMessages((current) => mergeMessages(current, payload.items));
@@ -80,7 +132,21 @@ export function useChatSession(chatId: number | null) {
             }
 
             if (payload.type === "message") {
-              setMessages((current) => mergeMessages(current, [payload]));
+              const message = payload as ChatMessage;
+              setMessages((current) => mergeMessages(current, [message]));
+              if (typeof document === "undefined" || document.visibilityState === "visible") {
+                void confirmRead(targetChatId);
+              }
+              return;
+            }
+
+            if (payload.type === "message_delivered") {
+              setMessages((current) => applyDelivered(current, payload));
+              return;
+            }
+
+            if (payload.type === "message_read") {
+              setMessages((current) => applyRead(current, payload));
             }
           } catch {
             setConnectionStatus("Не удалось обработать сообщение. Используется обычный режим.");
@@ -124,13 +190,13 @@ export function useChatSession(chatId: number | null) {
       };
     }
 
-    connectToChat(chatId);
+    void connectToChat(chatId);
 
     return () => {
       cancelled = true;
       closeSocket();
     };
-  }, [chatId, closeSocket, loadHistory]);
+  }, [chatId, closeSocket, confirmRead, loadHistory]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -163,5 +229,6 @@ export function useChatSession(chatId: number | null) {
     sendMessage,
     reloadHistory: loadHistory,
     closeSocket,
+    confirmRead,
   };
 }

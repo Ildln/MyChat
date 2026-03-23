@@ -7,6 +7,14 @@ function getDeviceLocale() {
   return "ru-RU";
 }
 
+function buildTimeFormatterOptions(): Intl.DateTimeFormatOptions {
+  return {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  };
+}
+
 export function formatMessageTime(value?: string): string {
   if (!value) {
     return "";
@@ -18,8 +26,7 @@ export function formatMessageTime(value?: string): string {
   }
 
   return new Intl.DateTimeFormat(getDeviceLocale(), {
-    hour: "2-digit",
-    minute: "2-digit",
+    ...buildTimeFormatterOptions(),
   }).format(date);
 }
 
@@ -83,8 +90,7 @@ export function formatLastSeen(value?: string | null): string {
   return `был(а) в сети ${new Intl.DateTimeFormat(getDeviceLocale(), {
     day: "2-digit",
     month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...buildTimeFormatterOptions(),
   }).format(date)}`;
 }
 

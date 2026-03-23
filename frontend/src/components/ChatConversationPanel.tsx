@@ -17,7 +17,18 @@ type ChatConversationPanelProps = {
   emptyText?: string;
   onSendMessage: (text: string) => Promise<void>;
   onBack?: () => void;
+  onOpenInfo?: () => void;
 };
+
+function getDeliveryIndicator(status?: string | null): string {
+  if (status === "read") {
+    return "✓✓";
+  }
+  if (status === "delivered") {
+    return "✓✓";
+  }
+  return "✓";
+}
 
 export function ChatConversationPanel({
   chat,
@@ -29,6 +40,7 @@ export function ChatConversationPanel({
   emptyText = "Откройте direct chat, чтобы увидеть историю сообщений.",
   onSendMessage,
   onBack,
+  onOpenInfo,
 }: ChatConversationPanelProps) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState("");
@@ -91,13 +103,17 @@ export function ChatConversationPanel({
               ←
             </button>
           ) : null}
-          <UserAvatar avatarUrl={avatarUrl} name={avatarName} seed={chat.id} size="md" />
-          <div className="min-w-0">
-            <div className="truncate text-[24px] font-semibold text-white md:text-[28px]">
-              {chatTitle}
+          <button
+            className="flex min-w-0 items-center gap-4 text-left"
+            onClick={onOpenInfo}
+            type="button"
+          >
+            <UserAvatar avatarUrl={avatarUrl} name={avatarName} seed={chat.id} size="md" />
+            <div className="min-w-0">
+              <div className="truncate text-[24px] font-semibold text-white md:text-[28px]">{chatTitle}</div>
+              <div className="mt-1 text-sm text-zinc-400">{subtitle}</div>
             </div>
-            <div className="mt-1 text-sm text-zinc-400">{subtitle}</div>
-          </div>
+          </button>
         </div>
         {chat.type === "group" ? (
           <div className="mt-4 truncate text-sm text-zinc-500">
@@ -119,18 +135,39 @@ export function ChatConversationPanel({
           <div className="space-y-5 md:space-y-7">
             {messages.map((message) => {
               const isMine = currentUser?.id === message.user_id;
+              const showAuthor = chat.type === "group" && !isMine;
               return (
                 <div className={`flex ${isMine ? "justify-end" : "justify-start"}`} key={message.id}>
-                  <div
-                    className={`max-w-[78%] rounded-[22px] px-5 py-4 shadow-[0_14px_30px_rgba(0,0,0,0.18)] md:max-w-[44%] ${
-                      isMine
-                        ? "rounded-br-md bg-white text-zinc-950"
-                        : "rounded-bl-md bg-[#1c1c1f] text-white"
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap break-words text-[15px] leading-7">{message.text}</div>
-                    <div className={`mt-2 text-xs ${isMine ? "text-zinc-500" : "text-zinc-400"}`}>
-                      {formatMessageTime(message.created_at)}
+                  <div className={`flex max-w-[88%] gap-3 md:max-w-[60%] ${isMine ? "flex-row-reverse" : "flex-row"}`}>
+                    {showAuthor ? (
+                      <div className="pt-7">
+                        <UserAvatar
+                          avatarUrl={message.author_avatar_url}
+                          name={message.author_username}
+                          seed={message.user_id}
+                          size="sm"
+                        />
+                      </div>
+                    ) : null}
+                    <div
+                      className={`rounded-[22px] px-5 py-4 shadow-[0_14px_30px_rgba(0,0,0,0.18)] ${
+                        isMine ? "rounded-br-md bg-white text-zinc-950" : "rounded-bl-md bg-[#1c1c1f] text-white"
+                      }`}
+                    >
+                      {showAuthor ? (
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                          {message.author_username}
+                        </div>
+                      ) : null}
+                      <div className="whitespace-pre-wrap break-words text-[15px] leading-7">{message.text}</div>
+                      <div className={`mt-2 flex items-center gap-2 text-xs ${isMine ? "justify-end text-zinc-500" : "text-zinc-400"}`}>
+                        <span>{formatMessageTime(message.created_at)}</span>
+                        {isMine && chat.type === "direct" ? (
+                          <span className={message.delivery_status === "read" ? "text-sky-500" : "text-zinc-500"}>
+                            {getDeliveryIndicator(message.delivery_status)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>

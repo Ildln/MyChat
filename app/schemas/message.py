@@ -27,3 +27,11 @@ class ChatMessageRead(BaseModel):
     user_id: int
     text: str
     created_at: datetime
+    author_username: str
+    author_avatar_url: str | None = None
+    delivery_status: str | None = None
+
+
+class ChatReadResponse(BaseModel):
+    chat_id: int
+    unread_count: int

@@ -5,3 +5,4 @@ from .friendship import Friendship
 from .chat import Chat
 from .chat_member import ChatMember
 from .push_subscription import PushSubscription
+from .message_receipt import MessageReceipt

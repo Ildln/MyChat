@@ -1,17 +1,23 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { getFriends } from "../api/friends";
 import { ChatConversationPanel } from "../components/ChatConversationPanel";
+import { GroupChatDetailsModal } from "../components/GroupChatDetailsModal";
 import { useAuth } from "../hooks/useAuth";
 import { useChatSession } from "../hooks/useChatSession";
 import { useChats } from "../hooks/useChats";
+import type { User } from "../types/user";
 
 export function ChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams();
   const { user } = useAuth();
-  const { chats, isReady, setActiveChatId, markChatAsRead } = useChats();
+  const { chats, isReady, setActiveChatId, markChatAsRead, refreshChat, addMembersToChat, leaveConversation } = useChats();
   const [status, setStatus] = useState("");
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [friends, setFriends] = useState<User[]>([]);
+  const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
 
   const numericChatId = Number(chatId);
   const selectedChat = useMemo(
@@ -51,6 +57,53 @@ export function ChatPage() {
     setStatus("");
   }, [isReady, numericChatId, selectedChat]);
 
+  async function handleOpenInfo() {
+    if (!selectedChat || selectedChat.type !== "group") {
+      return;
+    }
+
+    try {
+      setFriends(await getFriends());
+      setIsDetailsOpen(true);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось загрузить список друзей.");
+    }
+  }
+
+  async function handleAddMembers(userIds: number[]) {
+    if (!selectedChat) {
+      return;
+    }
+
+    setIsUpdatingGroup(true);
+    try {
+      await addMembersToChat(selectedChat.id, userIds);
+      await refreshChat(selectedChat.id);
+      setStatus("Участники добавлены.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось добавить участников.");
+    } finally {
+      setIsUpdatingGroup(false);
+    }
+  }
+
+  async function handleLeaveGroup() {
+    if (!selectedChat) {
+      return;
+    }
+
+    setIsUpdatingGroup(true);
+    try {
+      await leaveConversation(selectedChat.id);
+      setIsDetailsOpen(false);
+      navigate("/", { replace: true });
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось выйти из беседы.");
+    } finally {
+      setIsUpdatingGroup(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#09090a] text-zinc-50">
       {status ? (
@@ -67,7 +120,17 @@ export function ChatPage() {
         isLoading={isLoading}
         messages={messages}
         onBack={() => navigate("/")}
+        onOpenInfo={selectedChat?.type === "group" ? handleOpenInfo : undefined}
         onSendMessage={sendMessage}
+      />
+      <GroupChatDetailsModal
+        chat={selectedChat}
+        friends={friends}
+        isOpen={isDetailsOpen}
+        isSubmitting={isUpdatingGroup}
+        onAddMembers={handleAddMembers}
+        onClose={() => setIsDetailsOpen(false)}
+        onLeave={handleLeaveGroup}
       />
     </div>
   );

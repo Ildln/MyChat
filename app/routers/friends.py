@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
@@ -9,14 +9,21 @@ from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.friend_request import FriendRequestCreate, FriendRequestRead
 from app.schemas.user import UserRead
+from app.services.push import send_push_notifications_for_friend_request
 from app.services.users import build_user_read
+from app.services.ws_manager import manager
 
 router = APIRouter(prefix="/friends", tags=["friends"])
+
+
+def build_notification_room(user_id: int) -> str:
+    return f"user:{user_id}"
 
 
 @router.post("/requests", response_model=FriendRequestRead)
 def create_friend_request(
     payload: FriendRequestCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -55,6 +62,15 @@ def create_friend_request(
     session.add(friend_request)
     session.commit()
     session.refresh(friend_request)
+
+    manager.broadcast_sync(
+        build_notification_room(friend_request.to_user_id),
+        {
+            "type": "friend_request_created",
+            "request": friend_request.model_dump(mode="json"),
+        },
+    )
+    background_tasks.add_task(send_push_notifications_for_friend_request, friend_request.id)
     return friend_request
 
 
@@ -163,6 +179,22 @@ def accept_friend_request(
     session.add(friend_request)
     session.commit()
     session.refresh(friend_request)
+
+    for user_id in (friend_request.from_user_id, friend_request.to_user_id):
+        manager.broadcast_sync(
+            build_notification_room(user_id),
+            {
+                "type": "friend_request_updated",
+                "request": friend_request.model_dump(mode="json"),
+            },
+        )
+        manager.broadcast_sync(
+            build_notification_room(user_id),
+            {
+                "type": "friends_updated",
+                "user_id": user_id,
+            },
+        )
     return friend_request
 
 
@@ -177,4 +209,13 @@ def decline_friend_request(
     session.add(friend_request)
     session.commit()
     session.refresh(friend_request)
+
+    for user_id in (friend_request.from_user_id, friend_request.to_user_id):
+        manager.broadcast_sync(
+            build_notification_room(user_id),
+            {
+                "type": "friend_request_updated",
+                "request": friend_request.model_dump(mode="json"),
+            },
+        )
     return friend_request

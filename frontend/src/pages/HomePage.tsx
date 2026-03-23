@@ -21,6 +21,7 @@ import { useChats } from "../hooks/useChats";
 import { getChatTitle } from "../lib/chat";
 import { getPresenceLabel } from "../lib/format";
 import { getUserAbout } from "../lib/profile";
+import { buildNotificationsWebSocketUrl } from "../lib/ws";
 import type { FriendRequest } from "../types/friends";
 import type { User } from "../types/user";
 
@@ -62,6 +63,34 @@ export function HomePage() {
 
   useEffect(() => {
     void loadDashboard();
+  }, []);
+
+  useEffect(() => {
+    const socket = new WebSocket(buildNotificationsWebSocketUrl());
+
+    socket.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { type?: string };
+        if (!payload.type) {
+          return;
+        }
+
+        if (
+          payload.type === "friend_requests_snapshot" ||
+          payload.type === "friend_request_created" ||
+          payload.type === "friend_request_updated" ||
+          payload.type === "friends_updated"
+        ) {
+          void loadDashboard();
+        }
+      } catch {
+        // Игнорируем одиночное битое событие, UI не должен из-за него падать.
+      }
+    });
+
+    return () => {
+      socket.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -406,7 +435,7 @@ export function HomePage() {
               onClick={() => setActiveTab("requests")}
               type="button"
             >
-              Заявки
+              Заявки {visibleIncomingRequests.length > 0 ? `(${visibleIncomingRequests.length})` : ""}
             </button>
             <button
               className={`rounded-[14px] px-4 py-3 text-sm font-semibold transition ${
@@ -571,7 +600,7 @@ export function HomePage() {
           {activeTab === "chats" ? renderMobileChats() : null}
           {activeTab === "profile" ? renderMobileProfile() : null}
         </main>
-        <MobileBottomNav activeTab={activeTab} onChange={setActiveTab} />
+        <MobileBottomNav activeTab={activeTab} onChange={setActiveTab} requestBadge={visibleIncomingRequests.length} />
       </div>
 
       <div className="hidden lg:flex">

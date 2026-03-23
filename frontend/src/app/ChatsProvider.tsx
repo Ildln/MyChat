@@ -9,12 +9,17 @@
   type ReactNode,
 } from "react";
 
-import { createDirectChat, createGroupChat, getChatMessages, getChats } from "../api/chats";
+import { addChatMembers, createDirectChat, createGroupChat, getChat, getChats, leaveChat } from "../api/chats";
 import { useAuthContext } from "./AuthProvider";
 import { formatMessageDay } from "../lib/format";
 import { buildChatWebSocketUrl } from "../lib/ws";
 import type { Chat } from "../types/chat";
-import type { ChatMessage, ChatMessageEvent } from "../types/message";
+import type {
+  ChatMessage,
+  ChatMessageDeliveredEvent,
+  ChatMessageEvent,
+  ChatMessageReadEvent,
+} from "../types/message";
 
 type ChatSummary = {
   preview: string;
@@ -29,26 +34,50 @@ type ChatsContextValue = {
   activeChatId: number | null;
   isReady: boolean;
   refreshChats: () => Promise<void>;
+  refreshChat: (chatId: number) => Promise<void>;
   openOrCreateChat: (friendId: number) => Promise<Chat>;
   createConversation: (payload: { title?: string; userIds: number[] }) => Promise<Chat>;
+  addMembersToChat: (chatId: number, userIds: number[]) => Promise<Chat>;
+  leaveConversation: (chatId: number) => Promise<void>;
   markChatAsRead: (chatId: number) => void;
   setActiveChatId: (chatId: number | null) => void;
 };
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
 
-function sortChats(chats: Chat[], summaries: Record<number, ChatSummary>) {
-  return [...chats].sort((left, right) => {
-    const rightValue = summaries[right.id]?.sortValue || 0;
-    const leftValue = summaries[left.id]?.sortValue || 0;
-    return rightValue - leftValue;
-  });
+function getChatSortValue(chat: Chat) {
+  return chat.last_message ? Date.parse(chat.last_message.created_at) || 0 : Date.parse(chat.created_at) || 0;
+}
+
+function sortChats(chats: Chat[]) {
+  return [...chats].sort((left, right) => getChatSortValue(right) - getChatSortValue(left));
+}
+
+function buildSummary(chat: Chat): ChatSummary {
+  return {
+    preview: chat.last_message?.text || "Откройте чат, чтобы начать переписку",
+    time: chat.last_message ? formatMessageDay(chat.last_message.created_at) : "",
+    sortValue: getChatSortValue(chat),
+  };
+}
+
+function applyLastMessage(chat: Chat, message: ChatMessage): Chat {
+  return {
+    ...chat,
+    last_message: {
+      id: message.id,
+      user_id: message.user_id,
+      text: message.text,
+      created_at: message.created_at,
+      author_username: message.author_username,
+      author_avatar_url: message.author_avatar_url,
+    },
+  };
 }
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isReady, user } = useAuthContext();
   const [chats, setChats] = useState<Chat[]>([]);
-  const [chatSummaries, setChatSummaries] = useState<Record<number, ChatSummary>>({});
   const [unreadByChat, setUnreadByChat] = useState<Record<number, number>>({});
   const [activeChatId, setActiveChatIdState] = useState<number | null>(null);
   const [isChatsReady, setIsChatsReady] = useState(false);
@@ -60,55 +89,39 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     socketsRef.current = new Map();
   }, []);
 
-  const loadChatSummaries = useCallback(async (chatItems: Chat[]) => {
-    const entries = await Promise.all(
-      chatItems.map(async (chat) => {
-        try {
-          const messages = await getChatMessages(chat.id);
-          const lastMessage = messages[messages.length - 1];
-          const sortValue = lastMessage ? Date.parse(lastMessage.created_at) || 0 : Date.parse(chat.created_at) || 0;
-          return [
-            chat.id,
-            {
-              preview: lastMessage?.text || "Откройте чат, чтобы начать переписку",
-              time: lastMessage ? formatMessageDay(lastMessage.created_at) : "",
-              sortValue,
-            },
-          ] as const;
-        } catch {
-          return [
-            chat.id,
-            {
-              preview: "Сообщения пока недоступны",
-              time: "",
-              sortValue: Date.parse(chat.created_at) || 0,
-            },
-          ] as const;
-        }
-      }),
+  const syncChats = useCallback((incomingChats: Chat[]) => {
+    const sortedChats = sortChats(incomingChats);
+    setChats(sortedChats);
+    setUnreadByChat(
+      Object.fromEntries(sortedChats.map((chat) => [chat.id, chat.unread_count || 0])) as Record<number, number>,
     );
-
-    return Object.fromEntries(entries);
   }, []);
 
   const refreshChats = useCallback(async () => {
     if (!isAuthenticated) {
       setChats([]);
-      setChatSummaries({});
       setUnreadByChat({});
       setIsChatsReady(true);
       return;
     }
 
     const chatItems = await getChats();
-    const summaries = await loadChatSummaries(chatItems);
-    setChatSummaries(summaries);
-    setChats(sortChats(chatItems, summaries));
+    syncChats(chatItems);
     setIsChatsReady(true);
-  }, [isAuthenticated, loadChatSummaries]);
+  }, [isAuthenticated, syncChats]);
+
+  const refreshChat = useCallback(async (chatId: number) => {
+    const chat = await getChat(chatId);
+    setChats((current) => {
+      const others = current.filter((item) => item.id !== chatId);
+      return sortChats([...others, chat]);
+    });
+    setUnreadByChat((current) => ({ ...current, [chat.id]: chat.unread_count || 0 }));
+  }, []);
 
   const markChatAsRead = useCallback((chatId: number) => {
     setUnreadByChat((current) => ({ ...current, [chatId]: 0 }));
+    setChats((current) => current.map((chat) => (chat.id === chatId ? { ...chat, unread_count: 0 } : chat)));
   }, []);
 
   const setActiveChatId = useCallback(
@@ -125,11 +138,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   const openOrCreateChat = useCallback(
     async (friendId: number) => {
       const chat = await createDirectChat(friendId);
-      await refreshChats();
+      await refreshChat(chat.id);
       markChatAsRead(chat.id);
       return chat;
     },
-    [markChatAsRead, refreshChats],
+    [markChatAsRead, refreshChat],
   );
 
   const createConversation = useCallback(
@@ -143,12 +156,32 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         chat = await createGroupChat(title?.trim() || "Новая беседа", uniqueUserIds);
       }
 
-      await refreshChats();
+      await refreshChat(chat.id);
       markChatAsRead(chat.id);
       return chat;
     },
-    [markChatAsRead, refreshChats],
+    [markChatAsRead, refreshChat],
   );
+
+  const addMembersToChat = useCallback(async (chatId: number, userIds: number[]) => {
+    const updatedChat = await addChatMembers(chatId, userIds);
+    setChats((current) => sortChats([...current.filter((chat) => chat.id !== chatId), updatedChat]));
+    return updatedChat;
+  }, []);
+
+  const leaveConversation = useCallback(async (chatId: number) => {
+    await leaveChat(chatId);
+    setChats((current) => current.filter((chat) => chat.id !== chatId));
+    setUnreadByChat((current) => {
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
+    if (activeChatIdRef.current === chatId) {
+      activeChatIdRef.current = null;
+      setActiveChatIdState(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isReady) {
@@ -158,7 +191,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) {
       closeSockets();
       setChats([]);
-      setChatSummaries({});
       setUnreadByChat({});
       setActiveChatId(null);
       setIsChatsReady(true);
@@ -186,38 +218,43 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       socket.addEventListener("message", (event) => {
         try {
-          const payload = JSON.parse(event.data) as ChatMessageEvent | { type: string };
-          if (payload.type !== "message") {
+          const payload = JSON.parse(event.data) as
+            | ChatMessageEvent
+            | ChatMessageDeliveredEvent
+            | ChatMessageReadEvent
+            | { type: string };
+
+          if (payload.type === "message") {
+            const message = payload as ChatMessage;
+            setChats((current) => {
+              const currentChat = current.find((item) => item.id === chat.id);
+              if (!currentChat) {
+                return current;
+              }
+              const updatedChat = applyLastMessage(currentChat, message);
+              if (message.user_id !== user.id && activeChatIdRef.current !== chat.id) {
+                updatedChat.unread_count = (updatedChat.unread_count || 0) + 1;
+              }
+              const others = current.filter((item) => item.id !== chat.id);
+              return sortChats([updatedChat, ...others]);
+            });
+
+            if (message.user_id !== user.id && activeChatIdRef.current !== chat.id) {
+              setUnreadByChat((current) => ({
+                ...current,
+                [chat.id]: (current[chat.id] || 0) + 1,
+              }));
+            }
             return;
           }
 
-          const message = payload as ChatMessage;
-          setChatSummaries((current) => ({
-            ...current,
-            [chat.id]: {
-              preview: message.text,
-              time: formatMessageDay(message.created_at),
-              sortValue: Date.parse(message.created_at) || Date.now(),
-            },
-          }));
-
-          setChats((current) => {
-            const currentChat = current.find((item) => item.id === chat.id);
-            if (!currentChat) {
-              return current;
+          if (payload.type === "message_read") {
+            if ((payload as ChatMessageReadEvent).chat_id === chat.id && activeChatIdRef.current === chat.id) {
+              markChatAsRead(chat.id);
             }
-            const others = current.filter((item) => item.id !== chat.id);
-            return [currentChat, ...others];
-          });
-
-          if (message.user_id !== user.id && activeChatIdRef.current !== chat.id) {
-            setUnreadByChat((current) => ({
-              ...current,
-              [chat.id]: (current[chat.id] || 0) + 1,
-            }));
           }
         } catch {
-          // Ничего не делаем: список чатов не должен падать из-за одного битого события.
+          // Список чатов не должен падать из-за одного битого realtime-события.
         }
       });
 
@@ -227,7 +264,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     return () => {
       closeSockets();
     };
-  }, [chatIdsKey, chats, closeSockets, isAuthenticated, user]);
+  }, [chatIdsKey, chats, closeSockets, isAuthenticated, markChatAsRead, user]);
+
+  const chatSummaries = useMemo(
+    () => Object.fromEntries(chats.map((chat) => [chat.id, buildSummary(chat)])),
+    [chats],
+  );
 
   const value = useMemo<ChatsContextValue>(
     () => ({
@@ -237,8 +279,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       activeChatId,
       isReady: isChatsReady,
       refreshChats,
+      refreshChat,
       openOrCreateChat,
       createConversation,
+      addMembersToChat,
+      leaveConversation,
       markChatAsRead,
       setActiveChatId,
     }),
@@ -249,8 +294,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       activeChatId,
       isChatsReady,
       refreshChats,
+      refreshChat,
       openOrCreateChat,
       createConversation,
+      addMembersToChat,
+      leaveConversation,
       markChatAsRead,
       setActiveChatId,
     ],
