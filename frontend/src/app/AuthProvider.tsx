@@ -8,8 +8,9 @@ import {
   type ReactNode,
 } from "react";
 
-import { getCurrentUser, login as loginRequest, register as registerRequest } from "../api/auth";
-import { clearAccessToken, getAccessToken, setAccessToken } from "../lib/storage";
+import { getCurrentUser, login as loginRequest, logoutSession, register as registerRequest } from "../api/auth";
+import { registerAuthFailureHandler } from "../api/http";
+import { clearAuthTokens, getAccessToken, getRefreshToken, setAuthTokens } from "../lib/storage";
 import type { LoginRequest, RegisterRequest } from "../types/auth";
 import type { User } from "../types/user";
 
@@ -21,7 +22,7 @@ type AuthContextValue = {
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
   refreshUser: () => Promise<User | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -31,16 +32,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string>(() => getAccessToken());
   const [isReady, setIsReady] = useState(false);
 
-  const logout = useCallback(() => {
-    clearAccessToken();
+  const clearLocalSession = useCallback(() => {
+    clearAuthTokens();
     setTokenState("");
     setUser(null);
     setIsReady(true);
   }, []);
 
+  const logout = useCallback(async () => {
+    try {
+      if (getAccessToken()) {
+        await logoutSession();
+      }
+    } catch {
+      // Локальная очистка сессии важнее сетевой ошибки logout.
+    } finally {
+      clearLocalSession();
+    }
+  }, [clearLocalSession]);
+
   const refreshUser = useCallback(async () => {
     const currentToken = getAccessToken();
-    if (!currentToken) {
+    const currentRefreshToken = getRefreshToken();
+    if (!currentToken && !currentRefreshToken) {
       setUser(null);
       return null;
     }
@@ -48,17 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      setTokenState(currentToken);
+      setTokenState(getAccessToken());
       return currentUser;
     } catch {
-      logout();
+      clearLocalSession();
       return null;
     }
-  }, [logout]);
+  }, [clearLocalSession]);
 
-  const completeAuth = useCallback(async (newToken: string) => {
-    setAccessToken(newToken);
-    setTokenState(newToken);
+  const completeAuth = useCallback(async (accessToken: string, refreshToken: string) => {
+    setAuthTokens(accessToken, refreshToken);
+    setTokenState(accessToken);
     const currentUser = await getCurrentUser();
     setUser(currentUser);
     setIsReady(true);
@@ -67,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (payload: LoginRequest) => {
       const response = await loginRequest(payload);
-      await completeAuth(response.access_token);
+      await completeAuth(response.access_token, response.refresh_token);
     },
     [completeAuth],
   );
@@ -75,17 +89,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (payload: RegisterRequest) => {
       const response = await registerRequest(payload);
-      await completeAuth(response.access_token);
+      await completeAuth(response.access_token, response.refresh_token);
     },
     [completeAuth],
   );
+
+  useEffect(() => {
+    registerAuthFailureHandler(() => {
+      clearLocalSession();
+    });
+  }, [clearLocalSession]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrapAuth() {
       const existingToken = getAccessToken();
-      if (!existingToken) {
+      const existingRefreshToken = getRefreshToken();
+      if (!existingToken && !existingRefreshToken) {
         if (!cancelled) {
           setIsReady(true);
         }
@@ -95,13 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const currentUser = await getCurrentUser();
         if (!cancelled) {
-          setTokenState(existingToken);
+          setTokenState(getAccessToken());
           setUser(currentUser);
           setIsReady(true);
         }
       } catch {
         if (!cancelled) {
-          logout();
+          clearLocalSession();
         }
       }
     }
@@ -111,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [logout]);
+  }, [clearLocalSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

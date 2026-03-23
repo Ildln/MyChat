@@ -31,6 +31,20 @@ export function getCurrentUser() {
   return apiRequest<User>("/auth/me");
 }
 
+export function refreshSession(refresh_token: string) {
+  return apiRequest<AuthTokenResponse>("/auth/refresh", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ refresh_token }),
+  });
+}
+
+export function logoutSession() {
+  return apiRequest<MessageResponse>("/auth/logout", {
+    method: "POST",
+  });
+}
+
 export function requestPasswordReset(payload: ForgotPasswordRequest) {
   return apiRequest<ForgotPasswordResponse>("/auth/forgot-password", {
     method: "POST",

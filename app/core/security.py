@@ -9,9 +9,10 @@ from jose import jwt, JWTError
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me-before-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
 PASSWORD_HASH_ITERATIONS = 100_000
 PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 
 def hash_password(password: str) -> str:
@@ -61,6 +62,18 @@ def hash_password_reset_token(token: str) -> str:
 
 def get_password_reset_expires_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def get_refresh_token_expires_at() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
 
 def create_access_token(*, sub: str, expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> str:

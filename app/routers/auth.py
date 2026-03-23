@@ -1,21 +1,24 @@
-import os
+﻿import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session, select
 
-from app.db import get_session
-from app.models.user import User
 from app.core.security import (
     create_access_token,
     generate_password_reset_token,
+    generate_refresh_token,
     get_password_reset_expires_at,
+    get_refresh_token_expires_at,
     hash_password,
     hash_password_reset_token,
+    hash_refresh_token,
     verify_password,
     verify_token,
 )
+from app.db import get_session
+from app.models.user import User
 from app.schemas.auth import (
     AuthTokenResponse,
     ChangePasswordRequest,
@@ -23,6 +26,7 @@ from app.schemas.auth import (
     ForgotPasswordResponse,
     LoginRequest,
     MessageResponse,
+    RefreshTokenRequest,
     RegisterRequest,
     ResetPasswordRequest,
 )
@@ -35,6 +39,23 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 def should_return_dev_reset_token() -> bool:
     return os.getenv("DEV_SHOW_PASSWORD_RESET_TOKEN", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def issue_auth_tokens(session: Session, user: User) -> AuthTokenResponse:
+    access_token = create_access_token(sub=str(user.id))
+    refresh_token = generate_refresh_token()
+    user.refresh_token_hash = hash_refresh_token(refresh_token)
+    user.refresh_token_expires_at = get_refresh_token_expires_at()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return AuthTokenResponse(
+        user_id=user.id,
+        username=user.username,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
 
 
 def get_current_user(
@@ -74,9 +95,7 @@ def register(
     if password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="passwords do not match")
 
-    existing_user = session.exec(
-        select(User).where(User.username == username)
-    ).first()
+    existing_user = session.exec(select(User).where(User.username == username)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="username already exists")
 
@@ -89,13 +108,71 @@ def register(
     session.refresh(user)
     user = touch_user(session, user)
 
-    token = create_access_token(sub=str(user.id))
+    return issue_auth_tokens(session, user)
 
-    return AuthTokenResponse(
-        user_id=user.id,
-        username=user.username,
-        access_token=token,
-    )
+
+@router.post("/login", response_model=AuthTokenResponse)
+def login(
+    payload: LoginRequest,
+    session: Session = Depends(get_session),
+):
+    username = payload.username.strip()
+    password = payload.password
+
+    if not username:
+        raise HTTPException(status_code=400, detail="username must not be empty")
+
+    if not password:
+        raise HTTPException(status_code=400, detail="password must not be empty")
+
+    user = session.exec(select(User).where(User.username == username)).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid username or password")
+
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="invalid username or password")
+
+    user = touch_user(session, user)
+    return issue_auth_tokens(session, user)
+
+
+@router.post("/refresh", response_model=AuthTokenResponse)
+def refresh_tokens(
+    payload: RefreshTokenRequest,
+    session: Session = Depends(get_session),
+):
+    refresh_token = payload.refresh_token.strip()
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="invalid refresh token")
+
+    token_hash = hash_refresh_token(refresh_token)
+    now = datetime.now(timezone.utc)
+    user = session.exec(
+        select(User).where(
+            User.refresh_token_hash == token_hash,
+            User.refresh_token_expires_at.is_not(None),
+            User.refresh_token_expires_at >= now,
+        )
+    ).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid refresh token")
+
+    user = touch_user(session, user)
+    return issue_auth_tokens(session, user)
+
+
+@router.post("/logout", response_model=MessageResponse)
+def logout(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    current_user.refresh_token_hash = None
+    current_user.refresh_token_expires_at = None
+    session.add(current_user)
+    session.commit()
+    return MessageResponse(message="Сессия завершена.")
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
@@ -187,40 +264,6 @@ def change_password(
     session.commit()
 
     return MessageResponse(message="Пароль успешно изменён.")
-
-
-@router.post("/login", response_model=AuthTokenResponse)
-def login(
-    payload: LoginRequest,
-    session: Session = Depends(get_session),
-):
-    username = payload.username.strip()
-    password = payload.password
-
-    if not username:
-        raise HTTPException(status_code=400, detail="username must not be empty")
-
-    if not password:
-        raise HTTPException(status_code=400, detail="password must not be empty")
-
-    user = session.exec(
-        select(User).where(User.username == username)
-    ).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="invalid username or password")
-
-    if not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=401, detail="invalid username or password")
-
-    user = touch_user(session, user)
-    token = create_access_token(sub=str(user.id))
-
-    return AuthTokenResponse(
-        user_id=user.id,
-        username=user.username,
-        access_token=token,
-    )
 
 
 @router.get("/me", response_model=UserRead)

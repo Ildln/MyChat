@@ -13,8 +13,15 @@ from app.core.security import (
     hash_password_reset_token,
 )
 from app.models.user import User
-from app.routers.auth import change_password, forgot_password, get_current_user, login, me, register, reset_password
-from app.schemas.auth import ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest
+from app.routers.auth import change_password, forgot_password, get_current_user, login, logout, me, refresh_tokens, register, reset_password
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
 
 
 class RegisterAuthTests(unittest.TestCase):
@@ -41,6 +48,7 @@ class RegisterAuthTests(unittest.TestCase):
         self.assertEqual(response.username, "alice")
         self.assertGreater(response.user_id, 0)
         self.assertTrue(response.access_token)
+        self.assertTrue(response.refresh_token)
         self.assertEqual(response.token_type, "bearer")
 
         with Session(self.engine) as session:
@@ -105,7 +113,34 @@ class RegisterAuthTests(unittest.TestCase):
         self.assertEqual(response.username, "alice")
         self.assertGreater(response.user_id, 0)
         self.assertTrue(response.access_token)
+        self.assertTrue(response.refresh_token)
         self.assertEqual(response.token_type, "bearer")
+
+    def test_refresh_tokens_success(self):
+        with Session(self.engine) as session:
+            auth_response = register(
+                RegisterRequest(username="alice", password="secret123", confirm_password="secret123"),
+                session,
+            )
+
+        with Session(self.engine) as session:
+            response = refresh_tokens(
+                RefreshTokenRequest(refresh_token=auth_response.refresh_token),
+                session,
+            )
+
+        self.assertEqual(response.username, "alice")
+        self.assertTrue(response.access_token)
+        self.assertTrue(response.refresh_token)
+        self.assertNotEqual(response.refresh_token, auth_response.refresh_token)
+
+    def test_refresh_tokens_rejects_invalid_token(self):
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                refresh_tokens(RefreshTokenRequest(refresh_token="bad-token"), session)
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid refresh token")
 
     def test_login_rejects_unknown_user(self):
         with Session(self.engine) as session:
@@ -210,6 +245,34 @@ class RegisterAuthTests(unittest.TestCase):
             login_response = login(LoginRequest(username="alice", password="new-secret"), session)
 
         self.assertEqual(login_response.username, "alice")
+
+    def test_logout_invalidates_refresh_token(self):
+        with Session(self.engine) as session:
+            auth_response = register(
+                RegisterRequest(username="alice", password="secret123", confirm_password="secret123"),
+                session,
+            )
+
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=auth_response.access_token,
+        )
+
+        with Session(self.engine) as session:
+            current_user = get_current_user(credentials, session)
+            response = logout(current_user, session)
+
+        self.assertEqual(response.message, "Сессия завершена.")
+
+        with Session(self.engine) as session:
+            with self.assertRaises(HTTPException) as exc_info:
+                refresh_tokens(
+                    RefreshTokenRequest(refresh_token=auth_response.refresh_token),
+                    session,
+                )
+
+        self.assertEqual(exc_info.exception.status_code, 401)
+        self.assertEqual(exc_info.exception.detail, "invalid refresh token")
 
     def test_me_success_with_valid_token(self):
         with Session(self.engine) as session:
