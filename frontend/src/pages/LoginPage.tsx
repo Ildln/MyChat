@@ -65,6 +65,11 @@ export function LoginPage() {
           Зарегистрироваться
         </Link>
       </p>
+      <p className="text-center text-sm text-zinc-400">
+        <Link className="text-white hover:text-zinc-300" to="/forgot-password">
+          Забыли пароль?
+        </Link>
+      </p>
     </form>
   );
 }

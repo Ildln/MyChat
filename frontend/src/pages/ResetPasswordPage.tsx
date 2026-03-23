@@ -1,32 +1,42 @@
-﻿import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
+import { resetPassword } from "../api/auth";
 
-export function RegisterPage() {
+export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const { register } = useAuth();
-  const [username, setUsername] = useState("");
+  const [searchParams] = useSearchParams();
+  const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setToken(searchParams.get("token") || "");
+  }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (password !== confirmPassword) {
       setStatus("Пароли не совпадают.");
       return;
     }
+
     setIsSubmitting(true);
     setStatus("");
 
     try {
-      await register({ username, password, confirm_password: confirmPassword });
-      navigate("/", { replace: true });
+      const response = await resetPassword({
+        token,
+        password,
+        confirm_password: confirmPassword,
+      });
+      setStatus(response.message);
+      window.setTimeout(() => navigate("/login", { replace: true }), 1200);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Не удалось завершить регистрацию.");
+      setStatus(error instanceof Error ? error.message : "Не удалось обновить пароль.");
     } finally {
       setIsSubmitting(false);
     }
@@ -35,50 +45,51 @@ export function RegisterPage() {
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-2">
-        <label className="block text-sm text-zinc-300">Имя пользователя</label>
+        <label className="block text-sm text-zinc-300">Reset token</label>
         <input
           className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-600"
-          placeholder="Придумайте имя пользователя"
+          onChange={(event) => setToken(event.target.value)}
+          placeholder="Вставьте reset token"
           type="text"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
+          value={token}
         />
       </div>
       <div className="space-y-2">
-        <label className="block text-sm text-zinc-300">Пароль</label>
+        <label className="block text-sm text-zinc-300">Новый пароль</label>
         <input
           className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-600"
-          placeholder="Придумайте пароль"
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Введите новый пароль"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
         />
       </div>
       <div className="space-y-2">
-        <label className="block text-sm text-zinc-300">Повторите пароль</label>
+        <label className="block text-sm text-zinc-300">Повторите новый пароль</label>
         <input
           className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-600"
-          placeholder="Повторите пароль"
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          placeholder="Повторите новый пароль"
           type="password"
           value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
         />
       </div>
-      {status ? <div className="rounded-2xl border border-rose-900 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{status}</div> : null}
+
+      {status ? <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-zinc-200">{status}</div> : null}
+
       <button
         className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isSubmitting}
         type="submit"
       >
-        {isSubmitting ? "Создаём аккаунт..." : "Зарегистрироваться"}
+        {isSubmitting ? "Сохраняем..." : "Сохранить новый пароль"}
       </button>
+
       <p className="text-center text-sm text-zinc-400">
-        Уже есть аккаунт?{" "}
         <Link className="text-white hover:text-zinc-300" to="/login">
-          Войти
+          Вернуться ко входу
         </Link>
       </p>
     </form>
   );
 }
-

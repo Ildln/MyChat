@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { changePassword } from "../api/auth";
 import { updateCurrentUser } from "../api/users";
 import { PushNotificationsCard } from "../components/PushNotificationsCard";
 import { UserAvatar } from "../components/UserAvatar";
@@ -16,6 +17,10 @@ export function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   useEffect(() => {
     setDraftAbout(user?.about || "");
     setDraftAvatarUrl(user?.avatar_url || "");
@@ -37,6 +42,30 @@ export function ProfilePage() {
       setStatus(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (newPassword !== confirmNewPassword) {
+      setStatus("Новые пароли не совпадают.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const response = await changePassword({
+        old_password: oldPassword,
+        new_password: newPassword,
+        confirm_new_password: confirmNewPassword,
+      });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setStatus(response.message);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось изменить пароль.");
+    } finally {
+      setIsChangingPassword(false);
     }
   }
 
@@ -95,6 +124,41 @@ export function ProfilePage() {
 
         <div className="mt-6">
           <PushNotificationsCard />
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div className="text-sm text-zinc-400">Сменить пароль</div>
+          <div className="mt-4 space-y-4">
+            <input
+              className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-zinc-500"
+              onChange={(event) => setOldPassword(event.target.value)}
+              placeholder="Старый пароль"
+              type="password"
+              value={oldPassword}
+            />
+            <input
+              className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-zinc-500"
+              onChange={(event) => setNewPassword(event.target.value)}
+              placeholder="Новый пароль"
+              type="password"
+              value={newPassword}
+            />
+            <input
+              className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-zinc-500"
+              onChange={(event) => setConfirmNewPassword(event.target.value)}
+              placeholder="Повторите новый пароль"
+              type="password"
+              value={confirmNewPassword}
+            />
+            <button
+              className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60"
+              disabled={isChangingPassword}
+              onClick={() => void handleChangePassword()}
+              type="button"
+            >
+              {isChangingPassword ? "Сохраняем..." : "Изменить пароль"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">

@@ -5,10 +5,12 @@ import { RequireAuth } from "../components/RequireAuth";
 import { AppLayout } from "../layouts/AppLayout";
 import { AuthLayout } from "../layouts/AuthLayout";
 import { ChatPage } from "../pages/ChatPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { ProfilePage } from "../pages/ProfilePage";
 import { RegisterPage } from "../pages/RegisterPage";
+import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 
 export const router = createBrowserRouter([
   {
@@ -31,6 +33,26 @@ export const router = createBrowserRouter([
           {
             index: true,
             element: <RegisterPage />,
+          },
+        ],
+      },
+      {
+        path: "/forgot-password",
+        element: <AuthLayout />,
+        children: [
+          {
+            index: true,
+            element: <ForgotPasswordPage />,
+          },
+        ],
+      },
+      {
+        path: "/reset-password",
+        element: <AuthLayout />,
+        children: [
+          {
+            index: true,
+            element: <ResetPasswordPage />,
           },
         ],
       },

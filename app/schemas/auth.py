@@ -4,11 +4,33 @@ from pydantic import BaseModel
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    confirm_password: str
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    username: str
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+    confirm_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+    confirm_new_password: str
 
 
 class AuthByUsernameRequest(BaseModel):
@@ -20,3 +42,7 @@ class AuthTokenResponse(BaseModel):
     username: str
     access_token: str
     token_type: str = "bearer"
+
+
+class MessageResponse(BaseModel):
+    message: str

@@ -55,7 +55,7 @@ class DirectChatsTests(unittest.TestCase):
 
     def create_user(self, username: str, password: str = "secret123"):
         with Session(self.engine) as session:
-            return register(RegisterRequest(username=username, password=password), session)
+            return register(RegisterRequest(username=username, password=password, confirm_password=password), session)
 
     def make_friends(self, sender_user_id: int, target_user_id: int):
         with Session(self.engine) as session:

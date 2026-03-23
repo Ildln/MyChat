@@ -38,7 +38,7 @@ class FriendRequestsTests(unittest.TestCase):
 
     def create_user(self, username: str, password: str = "secret123"):
         with Session(self.engine) as session:
-            return register(RegisterRequest(username=username, password=password), session)
+            return register(RegisterRequest(username=username, password=password, confirm_password=password), session)
 
     def test_create_friend_request_success(self):
         sender = self.create_user("alice")
